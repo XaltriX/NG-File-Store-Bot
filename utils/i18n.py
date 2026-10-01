@@ -70,7 +70,6 @@ STR = {
     },
     'hi': {
         'lang_pick': "🌐 <b>Choose your language</b>\n<b>अपनी भाषा चुनें</b>",
-        'welcome': ```python
 'welcome': (
     '✨ <b>स्वागत है, {name}!</b>\n\n'
     '<blockquote>'
