@@ -62,7 +62,7 @@ STR = {
     },
     'hi': {
         'lang_pick': "🌐 <b>Choose your language</b>\n<b>अपनी भाषा चुनें</b>",
-        'welcome': '✨ <b>Welcome, {name}!</b>\n\n<blockquote>📦 𝙁𝙞𝙡𝙚 → 𝙇𝙞𝙣𝙠 𝘽𝙤𝙩\n 👨‍💻 𝘽𝙮 <a href='https://t.me/NeonGhost'><b>NeonGhost</b></a></blockquote>'',
+        'welcome': "✨ <b>Welcome, {name}!</b>\n\n<blockquote>📦 𝙁𝙞𝙡𝙚 → 𝙇𝙞𝙣𝙠 𝘽𝙤𝙩\n 👨‍💻 𝘽𝙮 <a href='https://t.me/NeonGhost'><b>NeonGhost</b></a></blockquote>",
         'w_premium': "\n\n💎 <b>प्रीमियम एक्टिव</b> · {date} तक",
         'w_trial': "\n\n🎁 <b>फ्री ट्रायल</b> · दिन {day}/{days} · आज {left}/{daily} लिंक बाकी",
         'w_trial_new': "\n\n🎁 <b>फ्री ट्रायल</b> · {days} दिन, रोज़ {daily} लिंक। पहले लिंक से शुरू।",
