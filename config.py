@@ -55,7 +55,7 @@ class Config:
 
     # Pictures (direct image links). Replace with your own if you like.
     VERIFY_IMG = _get("VERIFY_IMG", "https://i.ibb.co/XkWwHqy8/photo-2026-09-04-23-47-45-7681831085168132132.jpg")
-    START_PIC = _get("START_PIC", "https://i.ibb.co/DPbqZ7Mn/photo-2026-09-04-23-38-51-7681830930549309480.jpg")
+    START_PIC = _get("START_PIC", "https://files.catbox.moe/ybhkr0.jpg")
 
     # Text shown under every delivered file, e.g. "Powered by @YourChannel" (empty = nothing)
     BRANDING_TEXT = _get("BRANDING_TEXT", "@linkz_Wallah")
