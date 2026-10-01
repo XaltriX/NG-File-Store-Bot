@@ -352,8 +352,8 @@ class Database:
             'preview_link': 'https://t.me/+xlTrZ9h4Ngg2Yjg8',
             'proofs_link': 'https://t.me/+YKC50zCkuqU0ZjM0',
             'qr_link': 'https://t.me/NgPremiumX/13',
-            'premium_card': PREMIUM_CARD_EN,
-            'premium_card_hi': PREMIUM_CARD_HI,
+            'prem_msg': PREMIUM_CARD_EN,
+            'prem_msg_hi': PREMIUM_CARD_HI,
             'payment_info': 'Sᴇɴᴅ ᴍᴏɴᴇʏ ᴛᴏ Bᴋᴀsʜ/Nᴀɢᴀᴅ ᴀɴᴅ ᴄᴏɴᴛᴀᴄᴛ Aᴅᴍɪɴ ᴡɪᴛʜ Sᴄʀᴇᴇɴsʜᴏᴛ.'
         }
         
@@ -674,7 +674,7 @@ class Database:
 
     async def set_pay_plan(self, user_id: int, plan_id):
         if plan_id:
-            await self.users_col.update_one({'_id': user_id}, {'$set': {'pay_plan': plan_id}}, upsert=True)
+            await self.users_col.update_one({'_id': user_id}, {'$set': {'pay_plan': plan_id, 'pay_ts': int(time.time())}}, upsert=True)
         else:
             await self.users_col.update_one({'_id': user_id}, {'$unset': {'pay_plan': ''}})
 

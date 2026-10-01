@@ -1,31 +1,15 @@
 """All user-facing texts (English default + Devanagari Hindi)."""
 
 PREMIUM_CARD_EN = (
-    "╔══ ✦ PREMIUM ✦ ══╗\n\n"
-    "🔥 50% OFF\n₹199 ➜ ₹99\n\n"
-    "🤖 2 Premium Bots\n🚫 Ad-Free • ⚡️ Instant\n\n"
-    "━━━━━━━━━━\n\n"
-    "💎 PREMIUM PLANS\n\n{plans}\n\n"
-    "⭐️ 250+ Buyers\n\n"
-    "━━━━━━━━━━\n\n"
-    "💳 <code>{upi}</code>\n\n"
-    "📩 {owner}\n\n"
-    "━━━━━━━━━━\n\n"
-    "🔥 Choose Your Plan & Get Premium Access"
+    "💎 <b>Choose Your Plan</b>\n\n"
+    "<blockquote>🚫 No ads\n✅ No verification\n⚡ Direct videos, instantly</blockquote>\n\n"
+    "👇 <i>Pick a plan to continue</i>"
 )
 
 PREMIUM_CARD_HI = (
-    "╔══ ✦ PREMIUM ✦ ══╗\n\n"
-    "🔥 50% की छूट\n₹199 ➜ ₹99\n\n"
-    "🤖 2 प्रीमियम बॉट\n🚫 विज्ञापन-मुक्त • ⚡️ तुरंत एक्टिवेशन\n\n"
-    "━━━━━━━━━━\n\n"
-    "💎 प्रीमियम प्लान\n\n{plans}\n\n"
-    "⭐️ 250+ खरीदार\n\n"
-    "━━━━━━━━━━\n\n"
-    "💳 <code>{upi}</code>\n\n"
-    "📩 {owner}\n\n"
-    "━━━━━━━━━━\n\n"
-    "🔥 अपना प्लान चुनें और प्रीमियम पाएं"
+    "💎 <b>अपना प्लान चुनें</b>\n\n"
+    "<blockquote>🚫 कोई विज्ञापन नहीं\n✅ कोई वेरिफिकेशन नहीं\n⚡ सीधा वीडियो, तुरंत</blockquote>\n\n"
+    "👇 <i>आगे बढ़ने के लिए प्लान चुनें</i>"
 )
 
 REMINDER_EN = ("👋 <b>Still looking for more?</b>\n\nYour free access is one tap away. "

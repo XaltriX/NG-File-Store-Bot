@@ -232,8 +232,8 @@ PROMPTS = {
     'tut2': ("Send the tutorial link for Shortner 2.", 's:2'),
     'rtext_en': ("Send the new <b>English</b> reminder message. HTML formatting is allowed.", 'r'),
     'rtext_hi': ("Send the new <b>Hindi</b> reminder message. HTML formatting is allowed.", 'r'),
-    'card_en': ("Send the new <b>English</b> premium card.\nKeep these placeholders: <code>{plans}</code> <code>{upi}</code> <code>{owner}</code>", 'pc'),
-    'card_hi': ("Send the new <b>Hindi</b> premium card.\nKeep these placeholders: <code>{plans}</code> <code>{upi}</code> <code>{owner}</code>", 'pc'),
+    'card_en': ("Send the new <b>English</b> premium message (shown when a user taps Premium). Optional placeholders: <code>{upi}</code> <code>{owner}</code>", 'pc'),
+    'card_hi': ("Send the new <b>Hindi</b> premium message (shown when a user taps Premium). Optional placeholders: <code>{upi}</code> <code>{owner}</code>", 'pc'),
     'upi': ("Send your UPI ID.", 'pc'),
     'owner': ("Send the owner handle, like <code>@NeonGhost</code>.", 'pc'),
     'qr_url': ("Send the QR image link (direct image URL).", 'pc'),
@@ -447,9 +447,7 @@ async def apply_input(message: Message, field: str):
         return None, "✅ Reminder text saved."
 
     if field in ('card_en', 'card_hi'):
-        if '{plans}' not in raw:
-            return "The card must contain the {plans} placeholder.", None
-        await db.update_settings('premium_card' if field == 'card_en' else 'premium_card_hi', rich)
+        await db.update_settings('prem_msg' if field == 'card_en' else 'prem_msg_hi', rich)
         return None, "✅ Card saved."
 
     if field == 'upi':

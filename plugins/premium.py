@@ -1,4 +1,5 @@
 import html
+import time
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
@@ -33,7 +34,7 @@ def owner_url(settings):
 
 
 def render_card(settings, lang):
-    tpl = settings.get('premium_card_hi' if lang == 'hi' else 'premium_card')
+    tpl = settings.get('prem_msg_hi' if lang == 'hi' else 'prem_msg')
     if not tpl:
         tpl = PREMIUM_CARD_HI if lang == 'hi' else PREMIUM_CARD_EN
     plans = "\n".join(f"🪙 ₹{p['price']} — {html.escape(plan_name(p, lang))}" for p in settings.get('premium_plans', []))
@@ -161,8 +162,8 @@ async def screenshot_handler(client: Client, message: Message):
     user_id = message.from_user.id
     user = await db.get_user(user_id)
     plan_id = (user or {}).get('pay_plan')
-    if not plan_id or await db.is_admin(user_id):
-        return  # not a payment screenshot, let other handlers run
+    if not plan_id or time.time() - (user or {}).get('pay_ts', 0) > 1800:
+        return  # not a payment screenshot (user never tapped I've Paid), let other handlers run
 
     lang = (user or {}).get('lang') or 'en'
     is_image = bool(message.photo) or (message.document and (message.document.mime_type or '').startswith('image/'))
