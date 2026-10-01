@@ -1,0 +1,9 @@
+Kurigram
+tgcrypto
+motor
+python-dotenv
+aiohttp
+uvloop
+orjson
+certifi
+dnspython
