@@ -20,7 +20,7 @@ REMINDER_HI = ("👋 <b>और फ़ाइलें चाहिए?</b>\n\nआ
 STR = {
     'en': {
         'lang_pick': "🌐 <b>Choose your language</b>\n<b>अपनी भाषा चुनें</b>",
-        'welcome': '✨ <b>Welcome, {name}!</b>\n\n<blockquote>🎬 Your home for K-Drama &amp; Movies.\nOpen any file link and your files arrive instantly.</blockquote>',
+        'welcome': '✨ <b>Welcome, {name}!</b>\n\n<blockquote>📦 𝙁𝙞𝙡𝙚 → 𝙇𝙞𝙣𝙠 𝘽𝙤𝙩\n 👨‍💻 𝘽𝙮 <a href='https://t.me/NeonGhost'><b>NeonGhost</b></a></blockquote>',
         'w_premium': "\n\n💎 <b>Premium active</b> · till {date}",
         'w_trial': "\n\n🎁 <b>Free trial</b> · Day {day}/{days} · {left}/{daily} links left today",
         'w_trial_new': "\n\n🎁 <b>Free trial</b> · {days} days, {daily} links a day. Starts with your first link.",
@@ -62,7 +62,7 @@ STR = {
     },
     'hi': {
         'lang_pick': "🌐 <b>Choose your language</b>\n<b>अपनी भाषा चुनें</b>",
-        'welcome': '✨ <b>नमस्ते {name}!</b>\n\n<blockquote>🎬 K-Drama और Movies का आपका अपना घर।\nकोई भी फ़ाइल लिंक खोलें और फ़ाइलें तुरंत पाएं।</blockquote>',
+        'welcome': '✨ <b>Welcome, {name}!</b>\n\n<blockquote>📦 𝙁𝙞𝙡𝙚 → 𝙇𝙞𝙣𝙠 𝘽𝙤𝙩\n 👨‍💻 𝘽𝙮 <a href='https://t.me/NeonGhost'><b>NeonGhost</b></a></blockquote>'',
         'w_premium': "\n\n💎 <b>प्रीमियम एक्टिव</b> · {date} तक",
         'w_trial': "\n\n🎁 <b>फ्री ट्रायल</b> · दिन {day}/{days} · आज {left}/{daily} लिंक बाकी",
         'w_trial_new': "\n\n🎁 <b>फ्री ट्रायल</b> · {days} दिन, रोज़ {daily} लिंक। पहले लिंक से शुरू।",
