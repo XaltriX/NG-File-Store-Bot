@@ -54,7 +54,7 @@ class Config:
     VERIFY_EXPIRE = _int("VERIFY_EXPIRE", 86400)
 
     # Pictures (direct image links). Replace with your own if you like.
-    VERIFY_IMG = _get("VERIFY_IMG", "https://i.ibb.co/XkWwHqy8/photo-2026-09-04-23-47-45-7681831085168132132.jpg")
+    VERIFY_IMG = _get("VERIFY_IMG", "https://files.catbox.moe/t0gn23.jpg")
     START_PIC = _get("START_PIC", "https://files.catbox.moe/ybhkr0.jpg")
 
     # Text shown under every delivered file, e.g. "Powered by @YourChannel" (empty = nothing)
