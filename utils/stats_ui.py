@@ -12,6 +12,8 @@ async def build_stats_text():
     total_banned = await db.total_banned_users()
     settings = await db.get_settings()
     counts = await db.verify_counts()
+    p_now, p_ever = await db.premium_stats()
+    v_now, v_ever = await db.verified_stats(settings.get('shortlink_type') == 'credit')
     today_s = await db.get_day_stats(0)
     uptime = str(timedelta(seconds=int(time.time() - BOT_START)))
 
@@ -30,6 +32,10 @@ async def build_stats_text():
         "<blockquote>"
         f"✅ {line('Verified today', counts['today'])}\n"
         f"🕘 {line('Yesterday', counts['yesterday'])}"
+        "</blockquote>\n"
+        "<blockquote>"
+        f"💎 Premium now: <b>{p_now:,}</b> · ever: <b>{p_ever:,}</b>\n"
+        f"✅ Verified now: <b>{v_now:,}</b> · ever (unique): <b>{v_ever:,}</b>"
         "</blockquote>\n"
         "<blockquote>"
         f"🎁 Trials started today: <b>{today_s.get('trials_started', 0)}</b>\n"

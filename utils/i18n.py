@@ -2,13 +2,33 @@
 
 PREMIUM_CARD_EN = (
     "💎 <b>Choose Your Plan</b>\n\n"
-    "<blockquote>🚫 No ads\n✅ No verification\n⚡ Direct videos, instantly</blockquote>\n\n"
+    "<blockquote>🎁 <b>One payment. Two bots.</b>\n{bots}\n"
+    "<i>Pay in either bot. Premium turns on in both.</i></blockquote>\n\n"
+    "<b>How it works</b>\n1️⃣ Pick a plan → 2️⃣ Pay by UPI → 3️⃣ Send screenshot → 4️⃣ Done\n\n"
+    "🚫 No ads · ✅ No verification · ⚡ Direct videos\n\n"
     "👇 <i>Pick a plan to continue</i>"
 )
 
 PREMIUM_CARD_HI = (
     "💎 <b>अपना प्लान चुनें</b>\n\n"
-    "<blockquote>🚫 कोई विज्ञापन नहीं\n✅ कोई वेरिफिकेशन नहीं\n⚡ सीधा वीडियो, तुरंत</blockquote>\n\n"
+    "<blockquote>🎁 <b>एक पेमेंट। दो बॉट।</b>\n{bots}\n"
+    "<i>किसी भी बॉट में पेमेंट करें। प्रीमियम दोनों में चालू होगा।</i></blockquote>\n\n"
+    "<b>कैसे होगा</b>\n1️⃣ प्लान चुनें → 2️⃣ UPI से पेमेंट → 3️⃣ स्क्रीनशॉट भेजें → 4️⃣ हो गया\n\n"
+    "🚫 कोई विज्ञापन नहीं · ✅ कोई वेरिफिकेशन नहीं · ⚡ सीधा वीडियो\n\n"
+    "👇 <i>आगे बढ़ने के लिए प्लान चुनें</i>"
+)
+
+PREMIUM_SOLO_EN = (
+    "💎 <b>Choose Your Plan</b>\n\n"
+    "<b>How it works</b>\n1️⃣ Pick a plan → 2️⃣ Pay by UPI → 3️⃣ Send screenshot → 4️⃣ Done\n\n"
+    "🚫 No ads · ✅ No verification · ⚡ Direct videos\n\n"
+    "👇 <i>Pick a plan to continue</i>"
+)
+
+PREMIUM_SOLO_HI = (
+    "💎 <b>अपना प्लान चुनें</b>\n\n"
+    "<b>कैसे होगा</b>\n1️⃣ प्लान चुनें → 2️⃣ UPI से पेमेंट → 3️⃣ स्क्रीनशॉट भेजें → 4️⃣ हो गया\n\n"
+    "🚫 कोई विज्ञापन नहीं · ✅ कोई वेरिफिकेशन नहीं · ⚡ सीधा वीडियो\n\n"
     "👇 <i>आगे बढ़ने के लिए प्लान चुनें</i>"
 )
 
@@ -20,15 +40,7 @@ REMINDER_HI = ("👋 <b>और फ़ाइलें चाहिए?</b>\n\nआ
 STR = {
     'en': {
         'lang_pick': "🌐 <b>Choose your language</b>\n<b>अपनी भाषा चुनें</b>",
-        'welcome': (
-    '✨ <b>Welcome, {name}!</b>\n\n'
-    '<blockquote>'
-    '📦 𝙁𝙞𝙡𝙚 → 𝙇𝙞𝙣𝙠 𝘽𝙤𝙩\n'
-    '👨‍💻 𝘽𝙮 <a href="https://t.me/NeonGhost"><b>NeonGhost</b></a>\n\n'
-    '⚡ <b>Works for:</b> <a href="https://t.me/Linkz_Wallah"><b>@Linkz_Wallah</b></a>\n'
-    '🎬 <b>Movies:</b> <a href="https://t.me/+p2dAkUL0d2NhYTM9"><b>𝙊𝙥𝙚𝙣 𝙈𝙤𝙫𝙞𝙚𝙨</b></a>'
-    '</blockquote>'
-),
+        'welcome': '✨ <b>Welcome, {name}!</b>\n\n<blockquote>🎬 Your home for K-Drama &amp; Movies.\nOpen any file link and your files arrive instantly.</blockquote>',
         'w_premium': "\n\n💎 <b>Premium active</b> · till {date}",
         'w_trial': "\n\n🎁 <b>Free trial</b> · Day {day}/{days} · {left}/{daily} links left today",
         'w_trial_new': "\n\n🎁 <b>Free trial</b> · {days} days, {daily} links a day. Starts with your first link.",
@@ -38,6 +50,7 @@ STR = {
         'b_verify': '🔓 Free Verify', 'b_tutorial': '🎥 How to verify', 'b_paid': "✅ I've Paid",
         'b_change': '🔄 Change Plan', 'b_cancel': '✖️ Cancel', 'b_renew': '🔁 Renew', 'b_upgrade': '⬆️ Upgrade Plan',
         'b_contact': '🛟 Contact Support',
+        'b_contact_owner': '💬 Contact Owner',
         'status': '📋 <b>YOUR STATUS</b>\n\n<blockquote>💎 <b>Plan:</b> {plan}\n🎁 <b>Trial:</b> {trial}\n🔓 <b>Access:</b> {access}\n📥 <b>Free links today:</b> {free}</blockquote>',
         'st_free': "Free", 'st_prem': "Premium · till {date}",
         'st_trial_on': "Day {day}/{days} · {left}/{daily} links left today",
@@ -70,15 +83,7 @@ STR = {
     },
     'hi': {
         'lang_pick': "🌐 <b>Choose your language</b>\n<b>अपनी भाषा चुनें</b>",
-'welcome': (
-    '✨ <b>स्वागत है, {name}!</b>\n\n'
-    '<blockquote>'
-    '📦 𝙁𝙞𝙡𝙚 → 𝙇𝙞𝙣𝙠 𝘽𝙤𝙩\n'
-    '👨‍💻 𝘽𝙮 <a href="https://t.me/NeonGhost"><b>NeonGhost</b></a>\n\n'
-    '⚡ <b>यह काम करता है:</b> <a href="https://t.me/Linkz_Wallah"><b>@Linkz_Wallah</b></a> के लिए\n'
-    '🎬 <b>Movies:</b> <a href="https://t.me/+p2dAkUL0d2NhYTM9"><b>𝙈𝙤𝙫𝙞𝙚𝙨 𝙊𝙥𝙚𝙣 𝙆𝙖𝙧𝙚𝙣</b></a>'
-    '</blockquote>'
-),
+        'welcome': '✨ <b>नमस्ते {name}!</b>\n\n<blockquote>🎬 K-Drama और Movies का आपका अपना घर।\nकोई भी फ़ाइल लिंक खोलें और फ़ाइलें तुरंत पाएं।</blockquote>',
         'w_premium': "\n\n💎 <b>प्रीमियम एक्टिव</b> · {date} तक",
         'w_trial': "\n\n🎁 <b>फ्री ट्रायल</b> · दिन {day}/{days} · आज {left}/{daily} लिंक बाकी",
         'w_trial_new': "\n\n🎁 <b>फ्री ट्रायल</b> · {days} दिन, रोज़ {daily} लिंक। पहले लिंक से शुरू।",
@@ -88,6 +93,7 @@ STR = {
         'b_verify': '🔓 फ्री वेरिफाई', 'b_tutorial': '🎥 वेरिफाई कैसे करें', 'b_paid': '✅ मैंने पेमेंट कर दिया',
         'b_change': '🔄 प्लान बदलें', 'b_cancel': '✖️ रद्द करें', 'b_renew': '🔁 रिन्यू करें', 'b_upgrade': '⬆️ प्लान अपग्रेड करें',
         'b_contact': '🛟 सपोर्ट से संपर्क करें',
+        'b_contact_owner': '💬 ओनर से संपर्क करें',
         'status': '📋 <b>आपकी स्थिति</b>\n\n<blockquote>💎 <b>प्लान:</b> {plan}\n🎁 <b>ट्रायल:</b> {trial}\n🔓 <b>एक्सेस:</b> {access}\n📥 <b>आज के फ्री लिंक:</b> {free}</blockquote>',
         'st_free': "फ्री", 'st_prem': "प्रीमियम · {date} तक",
         'st_trial_on': "दिन {day}/{days} · आज {left}/{daily} लिंक बाकी",

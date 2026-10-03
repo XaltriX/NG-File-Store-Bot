@@ -6,67 +6,12 @@ from pyrogram.enums import ParseMode
 from config import Config
 from utils.database import db
 from utils.helpers import clean_url, ist_str
-from utils.i18n import tr, PREMIUM_CARD_EN, PREMIUM_CARD_HI
+from utils.i18n import tr
+from utils.prem import (plan_label, find_plan, contact_row, plans_view, pending_view)
 from utils.ui import btn, kb, show
 
 
-# ================= Helpers =================
-def plan_name(plan, lang):
-    if lang == 'hi' and plan.get('name_hi'):
-        return plan['name_hi']
-    return plan['name']
-
-
-def plan_label(plan, lang='en'):
-    return f"₹{plan['price']} · {plan_name(plan, lang)}"
-
-
-def find_plan(settings, plan_id):
-    for p in settings.get('premium_plans', []):
-        if p.get('id') == plan_id:
-            return p
-    return None
-
-
-def owner_url(settings):
-    handle = (settings.get('owner_handle') or '').strip().lstrip('@')
-    return f"https://t.me/{handle}" if handle else clean_url(Config.SUPPORT_LINK)
-
-
-def render_card(settings, lang):
-    tpl = settings.get('prem_msg_hi' if lang == 'hi' else 'prem_msg')
-    if not tpl:
-        tpl = PREMIUM_CARD_HI if lang == 'hi' else PREMIUM_CARD_EN
-    plans = "\n".join(f"🪙 ₹{p['price']} — {html.escape(plan_name(p, lang))}" for p in settings.get('premium_plans', []))
-    return (tpl.replace('{plans}', plans)
-               .replace('{upi}', html.escape(settings.get('upi_id', '')))
-               .replace('{owner}', html.escape(settings.get('owner_handle', ''))))
-
-
-def plans_view(settings, lang):
-    plans = settings.get('premium_plans', [])
-    if not plans:
-        return tr(lang, 'prem_gone'), kb([[btn(tr(lang, 'b_back'), 'u:home')]])
-    rows, row = [], []
-    for p in plans:
-        row.append(btn('🪙 ' + plan_label(p, lang), f"prem_plan:{p['id']}"))
-        if len(row) == 2:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
-    links = []
-    for key, label in (('info_link', '📋 Info'), ('preview_link', '👀 Preview'),
-                       ('proofs_link', '⭐ Proofs'), ('qr_link', '📱 QR')):
-        url = clean_url(settings.get(key, ''))
-        if url:
-            links.append(btn(label, url=url))
-    if links:
-        rows.append(links)
-    rows.append([btn(tr(lang, 'b_back'), 'u:home')])
-    return render_card(settings, lang), kb(rows)
-
-
+# ================= Helpers (shared, see utils/prem.py) =================
 async def user_lang(user_id):
     user = await db.get_user(user_id)
     return (user or {}).get('lang') or 'en'
@@ -77,7 +22,7 @@ async def user_lang(user_id):
 async def prem_open_cb(client: Client, query: CallbackQuery):
     settings = await db.get_settings()
     lang = await user_lang(query.from_user.id)
-    text, markup = plans_view(settings, lang)
+    text, markup = plans_view(settings, lang, getattr(client.me, 'username', None))
     await show(client, query, text, markup, fresh=(query.data == "prem_back"))
     await query.answer()
 
@@ -86,7 +31,7 @@ async def prem_open_cb(client: Client, query: CallbackQuery):
 async def plan_command(client: Client, message: Message):
     settings = await db.get_settings()
     lang = await user_lang(message.from_user.id)
-    text, markup = plans_view(settings, lang)
+    text, markup = plans_view(settings, lang, getattr(client.me, 'username', None))
     await message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
 
 
@@ -150,7 +95,7 @@ async def prem_cancel_cb(client: Client, query: CallbackQuery):
     await db.set_pay_plan(query.from_user.id, None)
     settings = await db.get_settings()
     lang = await user_lang(query.from_user.id)
-    text, markup = plans_view(settings, lang)
+    text, markup = plans_view(settings, lang, getattr(client.me, 'username', None))
     await show(client, query, text, markup, fresh=True)
     await query.answer()
 
@@ -206,11 +151,17 @@ async def screenshot_handler(client: Client, message: Message):
         message.stop_propagation()
 
     await db.set_pay_plan(user_id, None)
-    await message.reply_text(tr(lang, 'ss_got'), parse_mode=ParseMode.HTML)
+    rows = contact_row(settings, lang)
+    await message.reply_text(tr(lang, 'ss_got'), reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
     message.stop_propagation()
 
 
 # ================= Admin approval =================
+def is_list_message(msg):
+    """True for the text-only 'Pending payments' list (the original payment request is a photo/document)."""
+    return not (msg.photo or msg.document or msg.video)
+
+
 @Client.on_callback_query(filters.regex(r"^payok:"))
 async def pay_ok_cb(client: Client, query: CallbackQuery):
     if not await db.is_admin(query.from_user.id):
@@ -230,25 +181,33 @@ async def pay_ok_cb(client: Client, query: CallbackQuery):
     lang = await user_lang(buyer)
     selected = find_plan(settings, pay['plan'])
 
-    markup = None
+    rows = []
     if selected and selected['id'] != plan['id']:
         text = tr(lang, 'approved_diff', sel=html.escape(plan_label(selected, lang)),
                   plan=html.escape(plan_label(plan, lang)), date=ist_str(expire_at))
-        markup = kb([[btn(tr(lang, 'b_upgrade'), 'prem_back')]])
+        rows.append([btn(tr(lang, 'b_upgrade'), 'prem_back')])
     else:
         text = tr(lang, 'approved', plan=html.escape(plan_label(plan, lang)), date=ist_str(expire_at))
+    rows.extend(contact_row(settings, lang))
     try:
-        await client.send_message(buyer, text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        await client.send_message(buyer, text, reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
     except Exception:
         pass
 
-    old = query.message.caption.html if query.message.caption else ""
-    try:
-        await query.message.edit_caption(f"{old}\n\n✅ <b>Approved:</b> {html.escape(plan_label(plan))} · till {ist_str(expire_at)}",
-                                         parse_mode=ParseMode.HTML)
-    except Exception:
-        pass
-    await query.answer("Premium activated.")
+    queued = await db.sync_queue(buyer, plan['days'], f"pay_{pay_id}")
+    note = " · sent to partner bot" if queued else ""
+
+    if is_list_message(query.message):
+        ptext, pmarkup = await pending_view()
+        await show(client, query, ptext, pmarkup)
+    else:
+        old = query.message.caption.html if query.message.caption else ""
+        try:
+            await query.message.edit_caption(f"{old}\n\n✅ <b>Approved:</b> {html.escape(plan_label(plan))} · till {ist_str(expire_at)}{note}",
+                                             parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
+    await query.answer("Premium activated." + (" Partner sync queued." if queued else ""))
 
 
 @Client.on_callback_query(filters.regex(r"^payno:"))
@@ -262,16 +221,20 @@ async def pay_no_cb(client: Client, query: CallbackQuery):
 
     settings = await db.get_settings()
     lang = await user_lang(pay['u'])
-    markup = kb([[btn(tr(lang, 'b_contact'), url=owner_url(settings))]])
+    rows = contact_row(settings, lang)
     try:
-        await client.send_message(pay['u'], tr(lang, 'rejected'), reply_markup=markup, parse_mode=ParseMode.HTML)
+        await client.send_message(pay['u'], tr(lang, 'rejected'), reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
     except Exception:
         pass
-    old = query.message.caption.html if query.message.caption else ""
-    try:
-        await query.message.edit_caption(f"{old}\n\n❌ <b>Rejected</b>", parse_mode=ParseMode.HTML)
-    except Exception:
-        pass
+    if is_list_message(query.message):
+        ptext, pmarkup = await pending_view()
+        await show(client, query, ptext, pmarkup)
+    else:
+        old = query.message.caption.html if query.message.caption else ""
+        try:
+            await query.message.edit_caption(f"{old}\n\n❌ <b>Rejected</b>", parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
     await query.answer("Rejected.")
 
 
@@ -302,10 +265,14 @@ async def add_premium_cmd(client: Client, message: Message):
         expire_at = await db.extend_premium(user_id, days)
         await message.reply_text(f"✅ Premium added for <code>{user_id}</code> · till {ist_str(expire_at)}", parse_mode=ParseMode.HTML)
         lang = await user_lang(user_id)
+        settings = await db.get_settings()
+        rows = contact_row(settings, lang)
         try:
-            await client.send_message(user_id, tr(lang, 'approved', plan=f"{days} days", date=ist_str(expire_at)), parse_mode=ParseMode.HTML)
+            await client.send_message(user_id, tr(lang, 'approved', plan=f"{days} days", date=ist_str(expire_at)),
+                                      reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
         except Exception:
             pass
+        await db.sync_queue(user_id, days, f"m{user_id}_{int(time.time())}")
     except ValueError:
         await message.reply_text("❌ ID and days must be numbers!")
 

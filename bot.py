@@ -6,6 +6,7 @@ from config import Config
 from server import keep_alive
 from utils.database import db
 from utils.scheduler import reminder_loop
+from utils.sync import sync_loop
 
 # 🚀 Uvloop: The Ultimate CPU & RAM Engine
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -28,7 +29,9 @@ _orig_start = app.start
 
 async def _start_with_scheduler(*args, **kwargs):
     result = await _orig_start(*args, **kwargs)
-    asyncio.get_running_loop().create_task(reminder_loop(app))
+    loop = asyncio.get_running_loop()
+    loop.create_task(reminder_loop(app))
+    loop.create_task(sync_loop(app))
     return result
 
 app.start = _start_with_scheduler
@@ -46,6 +49,12 @@ async def setup_indexes():
         await db.users_col.create_index("trial_start", sparse=True)
         await db.premium_col.create_index("expire_at")
         await db.pay_col.create_index([("u", 1), ("status", 1)])
+        await db.users_col.create_index("ever_premium", sparse=True)
+        await db.users_col.create_index("ever_verified", sparse=True)
+        try:
+            await db.backfill_flags()
+        except Exception as e:
+            print(f"Flag backfill skipped: {e}")
         print("⚡ MongoDB Auto-Indexing & TTL Complete!")
     except Exception as e:
         print(f"Indexing Error: {e}")

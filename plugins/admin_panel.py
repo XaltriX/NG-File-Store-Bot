@@ -1,5 +1,7 @@
 import asyncio
 import html
+import re
+import time
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery
 from pyrogram.enums import ParseMode
@@ -8,10 +10,14 @@ from config import Config
 from utils.database import db
 from utils.helpers import clean_url, mask, ist_str, trial_info
 from utils.stats_ui import build_stats_text
+from utils.prem import premium_list_view, pending_view, fmt_age
+from utils import sync as syncmod
 from utils.ui import btn, kb, show, edit_by_id
 
 INPUT = {}      # admin_id -> {'field', 'chat', 'msg', 'back'}
-PENDING_BC = {}  # admin_id -> {'chat', 'src', 'mins', 'msg'}
+PENDING_BC = {}  # admin_id -> {'chat', 'src', 'mins', 'target'}
+BC = {'mins': 0}  # broadcast auto-delete minutes (single owner/admin)
+BC_LABELS = {'all': 'all users', 'prem': 'premium users (past + current)', 'ver': 'verified users (past + current)'}
 
 
 def onoff(v):
@@ -25,10 +31,13 @@ def short(v, n=40):
 
 # ================= Screens =================
 async def scr_home(s):
+    pend = await db.pending_count()
+    pay_label = f"💳 Pending payments ({pend})" if pend else "💳 Pending payments"
     rows = [
         [btn("🔗 Verify setup", "ap:v"), btn("🎁 Trial & Premium", "ap:tp")],
         [btn("⏰ Reminders", "ap:r"), btn("👥 Users", "ap:u")],
         [btn("📣 Broadcast", "ap:bc"), btn("📊 Stats & Files", "ap:st")],
+        [btn(pay_label, "ap:pp")],
         [btn("⚙️ General", "ap:g")],
         [btn("⬅️ Back", "u:home"), btn("✖️ Close", "ap:close")],
     ]
@@ -78,6 +87,7 @@ async def scr_tp(s):
     rows = [
         [btn("🎁 Trial & free links", "ap:tr")],
         [btn("🪙 Plans & prices", "ap:pl"), btn("🧾 Card & payment", "ap:pc")],
+        [btn("🔗 Partner bot", "ap:pt")],
         [btn("⬅️ Back", "ap:home")],
     ]
     return "💎 <b>TRIAL & PREMIUM</b>\n\n<blockquote>Choose what you want to edit.</blockquote>", kb(rows)
@@ -155,6 +165,7 @@ async def scr_reminders(s):
 
 async def scr_users(s):
     rows = [
+        [btn("💎 Premium list", "ap:pr:active:0")],
         [btn("Ban", "ap:in:u_ban"), btn("Unban", "ap:in:u_unban")],
         [btn("Add premium", "ap:in:u_addprem"), btn("Remove premium", "ap:in:u_delprem")],
         [btn("Add credits", "ap:in:u_addcred"), btn("Remove credits", "ap:in:u_remcred")],
@@ -165,13 +176,44 @@ async def scr_users(s):
 
 
 async def scr_broadcast(s):
+    n_all, n_prem, n_ver = await db.target_count('all'), await db.target_count('prem'), await db.target_count('ver')
+    mins = BC['mins']
+    text = ("📣 <b>BROADCAST</b>\n\n<blockquote>Pick who gets it, then send the message (text, photo, video, anything).\n"
+            f"Auto-delete: <b>{str(mins) + ' min' if mins else 'OFF'}</b></blockquote>")
     rows = [
-        [btn("Send to all", "ap:in:bc")],
-        [btn("Auto-delete 5m", "ap:in:bcd:5"), btn("10m", "ap:in:bcd:10")],
-        [btn("30m", "ap:in:bcd:30"), btn("60m", "ap:in:bcd:60")],
+        [btn(f"👥 All users ({n_all})", "ap:in:bc:all")],
+        [btn(f"💎 Premium ({n_prem})", "ap:in:bc:prem"), btn(f"✅ Verified ({n_ver})", "ap:in:bc:ver")],
+        [btn(f"🗑 Auto-delete: {str(mins) + 'm' if mins else 'OFF'}", "ap:bm")],
         [btn("⬅️ Back", "ap:home")],
     ]
-    return "📣 <b>BROADCAST</b>\n\n<blockquote>Choose a mode, then send the message (text, photo, video, anything).</blockquote>", kb(rows)
+    return text, kb(rows)
+
+
+async def scr_partner(s):
+    on = bool(s.get('sync_enabled'))
+    pend = await db.sync_pending_count()
+    last = s.get('sync_last_ok', 0)
+    err = s.get('sync_err')
+    status = f"⚠️ {html.escape(err)}" if err else ("✅ OK" if (on and last) else "—")
+    partner = s.get('partner_username')
+    text = (
+        "🔗 <b>PARTNER BOT</b>\n\n<blockquote>"
+        f"Sync: <b>{'ON' if on else 'OFF'}</b>\n"
+        f"Mailbox: <code>{html.escape(syncmod.host_of(s.get('sync_url')))}</code>\n"
+        f"DB name: <code>{html.escape(s.get('sync_db') or 'sync_mailbox')}</code>\n"
+        f"Partner: {'@' + html.escape(partner) if partner else 'not set'}\n"
+        f"Waiting to send: <b>{pend}</b> · Last sync: <b>{fmt_age(time.time() - last) if last else 'never'}</b>\n"
+        f"Status: {status}</blockquote>\n\n"
+        "<i>Premium you give here is also given in the partner bot. "
+        "Both bots must use the same Mailbox URL and DB name. Only grants are synced, never removals.</i>"
+    )
+    rows = [
+        [btn(f"Sync: {onoff(on)}", "ap:t:sync")],
+        [btn("Mailbox URL", "ap:in:sync_url"), btn("DB name", "ap:in:sync_db")],
+        [btn("Partner @username", "ap:in:sync_partner"), btn("🧪 Test connection", "ap:tc")],
+        [btn("⬅️ Back", "ap:tp")],
+    ]
+    return text, kb(rows)
 
 
 async def scr_stats(s):
@@ -204,7 +246,7 @@ async def build_screen(screen, s):
         return await scr_shortner(s, arg)
     table = {'home': scr_home, 'v': scr_verify, 'tp': scr_tp, 'tr': scr_trial, 'pl': scr_plans,
              'pc': scr_card, 'r': scr_reminders, 'u': scr_users, 'bc': scr_broadcast,
-             'st': scr_stats, 'g': scr_general}
+             'st': scr_stats, 'g': scr_general, 'pt': scr_partner}
     return await table.get(name, scr_home)(s)
 
 
@@ -232,8 +274,8 @@ PROMPTS = {
     'tut2': ("Send the tutorial link for Shortner 2.", 's:2'),
     'rtext_en': ("Send the new <b>English</b> reminder message. HTML formatting is allowed.", 'r'),
     'rtext_hi': ("Send the new <b>Hindi</b> reminder message. HTML formatting is allowed.", 'r'),
-    'card_en': ("Send the new <b>English</b> premium message (shown when a user taps Premium). Optional placeholders: <code>{upi}</code> <code>{owner}</code>", 'pc'),
-    'card_hi': ("Send the new <b>Hindi</b> premium message (shown when a user taps Premium). Optional placeholders: <code>{upi}</code> <code>{owner}</code>", 'pc'),
+    'card_en': ("Send the new <b>English</b> premium message (shown when a user taps Premium).\nPlaceholders: <code>{bots}</code> <code>{plans}</code> <code>{upi}</code> <code>{owner}</code>\nSend <code>default</code> to go back to the built-in text.", 'pc'),
+    'card_hi': ("Send the new <b>Hindi</b> premium message (shown when a user taps Premium).\nPlaceholders: <code>{bots}</code> <code>{plans}</code> <code>{upi}</code> <code>{owner}</code>\nSend <code>default</code> to go back to the built-in text.", 'pc'),
     'upi': ("Send your UPI ID.", 'pc'),
     'owner': ("Send the owner handle, like <code>@NeonGhost</code>.", 'pc'),
     'qr_url': ("Send the QR image link (direct image URL).", 'pc'),
@@ -251,7 +293,9 @@ PROMPTS = {
     'u_info': ("Send the <b>user ID</b>.", 'u'),
     'gen_db': ("Send the DB channel ID, like <code>-100xxxxxxxxxx</code>.", 'g'),
     'gen_log': ("Send the log channel ID, like <code>-100xxxxxxxxxx</code>.", 'g'),
-    'bc': ("Send the message to broadcast now.", 'bc'),
+    'sync_url': ("Send the <b>Mailbox MongoDB URL</b> (starts with <code>mongodb</code>). Both bots must use the same one. Your message is deleted right after.", 'pt'),
+    'sync_db': ("Send the <b>Mailbox DB name</b> (letters, numbers, _ or -). Both bots must use the same name. Default: <code>sync_mailbox</code>", 'pt'),
+    'sync_partner': ("Send the <b>partner bot's @username</b>.", 'pt'),
 }
 LINK_FIELDS = {'qr_link': 'qr_link', 'info_link': 'info_link', 'preview_link': 'preview_link', 'proofs_link': 'proofs_link'}
 
@@ -312,6 +356,11 @@ async def panel_cb(client: Client, query: CallbackQuery):
         elif key == 'mode':
             await db.update_settings('mode', 'private' if s.get('mode') == 'public' else 'public')
             screen = 'g'
+        elif key == 'sync':
+            if not s.get('sync_enabled') and not s.get('sync_url'):
+                return await query.answer("Set the Mailbox URL first.", show_alert=True)
+            await db.update_settings('sync_enabled', not s.get('sync_enabled', False))
+            screen = 'pt'
         else:
             setting, default, screen = TOGGLES[key]
             await db.update_settings(setting, not s.get(setting, default))
@@ -352,13 +401,38 @@ async def panel_cb(client: Client, query: CallbackQuery):
             return await render(client, chat_id, msg_id, 'u')
         return await query.answer()
 
+    if act == 'pr':
+        _, tab, page = data.split(':')
+        text, markup = await premium_list_view(client, tab, int(page))
+        await query.answer()
+        return await show(client, query, text, markup)
+
+    if act == 'pp':
+        text, markup = await pending_view()
+        await query.answer()
+        return await show(client, query, text, markup)
+
+    if act == 'tc':
+        ok, info = await syncmod.test_connection(client)
+        await query.answer("Connected ✅" if ok else "Connection failed ❌", show_alert=not ok)
+        return await render(client, chat_id, msg_id, 'pt', ("✅ " if ok else "⚠️ ") + html.escape(info))
+
+    if act == 'bm':
+        vals = [0, 5, 10, 30, 60]
+        BC['mins'] = vals[(vals.index(BC['mins']) + 1) % len(vals)] if BC['mins'] in vals else 0
+        await query.answer()
+        return await render(client, chat_id, msg_id, 'bc')
+
     if act == 'in':
         parts = data.split(':')
         field = parts[1]
         mins = 0
-        if field == 'bcd':
-            mins = int(parts[2])
-            prompt, back = "Send the message to broadcast. It will auto-delete after "f"<b>{mins} minutes</b>.", 'bc'
+        target = 'all'
+        if field == 'bc':
+            target = parts[2] if len(parts) > 2 and parts[2] in db.BC_FILTERS else 'all'
+            mins = BC['mins']
+            extra = f" It will auto-delete after <b>{mins} minutes</b>." if mins else ""
+            prompt, back = f"Send the message to broadcast to <b>{BC_LABELS[target]}</b>.{extra}", 'bc'
         elif field.startswith('plan_') and field != 'plan_new':
             plan = next((p for p in s.get('premium_plans', []) if p['id'] == field[5:]), None)
             if not plan:
@@ -368,7 +442,7 @@ async def panel_cb(client: Client, query: CallbackQuery):
             back = 'pl'
         else:
             prompt, back = PROMPTS[field]
-        INPUT[uid] = {'field': field, 'chat': chat_id, 'msg': msg_id, 'back': back, 'mins': mins}
+        INPUT[uid] = {'field': field, 'chat': chat_id, 'msg': msg_id, 'back': back, 'mins': mins, 'target': target}
         await show(client, query, f"✏️ {prompt}", kb([[btn("✖️ Cancel", "ap:ic")]]))
         return await query.answer()
 
@@ -447,8 +521,28 @@ async def apply_input(message: Message, field: str):
         return None, "✅ Reminder text saved."
 
     if field in ('card_en', 'card_hi'):
-        await db.update_settings('prem_msg' if field == 'card_en' else 'prem_msg_hi', rich)
+        key = 'card_custom_en' if field == 'card_en' else 'card_custom_hi'
+        await db.update_settings(key, '' if raw.lower() == 'default' else rich)
         return None, "✅ Card saved."
+
+    if field == 'sync_url':
+        if not raw.startswith('mongodb'):
+            return "The URL must start with mongodb:// or mongodb+srv://", None
+        syncmod.forget_client()
+        await db.update_settings('sync_url', raw)
+        return None, "✅ Mailbox URL saved. Now tap Test connection."
+    if field == 'sync_db':
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,60}', raw):
+            return "Use only letters, numbers, _ or - (max 60 characters).", None
+        syncmod.forget_client()
+        await db.update_settings('sync_db', raw)
+        return None, "✅ DB name saved."
+    if field == 'sync_partner':
+        name = raw.lstrip('@')
+        if not re.fullmatch(r'[A-Za-z0-9_]{4,32}', name):
+            return "That does not look like a bot username.", None
+        await db.update_settings('partner_username', name)
+        return None, "✅ Partner saved."
 
     if field == 'upi':
         await db.update_settings('upi_id', raw)
@@ -512,7 +606,8 @@ async def apply_input(message: Message, field: str):
             amount = int(parts[1])
             if field == 'u_addprem':
                 exp = await db.extend_premium(uid, amount)
-                return None, f"💎 Premium for <code>{uid}</code> till {ist_str(exp)}"
+                queued = await db.sync_queue(uid, amount, f"m{uid}_{int(time.time())}")
+                return None, f"💎 Premium for <code>{uid}</code> till {ist_str(exp)}" + (" · sent to partner bot" if queued else "")
             if field == 'u_addcred':
                 await db.add_credits(uid, amount)
                 return None, f"✅ Added {amount} credits to <code>{uid}</code>"
@@ -542,12 +637,13 @@ async def admin_input_router(client: Client, message: Message):
         return  # another command: drop the pending input and let it run
 
     field = st['field']
-    if field in ('bc', 'bcd'):
+    if field == 'bc':
         INPUT.pop(uid, None)
-        PENDING_BC[uid] = {'chat': message.chat.id, 'src': message.id, 'mins': st.get('mins', 0)}
-        total = await db.total_users()
+        target = st.get('target', 'all')
+        PENDING_BC[uid] = {'chat': message.chat.id, 'src': message.id, 'mins': st.get('mins', 0), 'target': target}
+        total = await db.target_count(target)
         extra = f" · auto-delete after {st['mins']} min" if st.get('mins') else ""
-        text = f"📣 <b>Ready to broadcast</b> to <b>{total}</b> users{extra}.\n\nSend it now?"
+        text = f"📣 <b>Ready to broadcast</b> to <b>{total}</b> {BC_LABELS[target]}{extra}.\n\nSend it now?"
         await edit_by_id(client, st['chat'], st['msg'], text, kb([[btn("✅ Confirm", "ap:bcgo"), btn("✖️ Cancel", "ap:bc")]]))
         message.stop_propagation()
 
@@ -557,6 +653,11 @@ async def admin_input_router(client: Client, message: Message):
 
     error, notice = await apply_input(message, field)
     if error:
+        if field == 'sync_url':
+            try:
+                await message.delete()  # never leave a database URL lying in the chat
+            except Exception:
+                pass
         await message.reply_text(f"⚠️ {error}")
         message.stop_propagation()
 
@@ -607,7 +708,7 @@ async def run_broadcast(client: Client, pb: dict, panel_chat: int, panel_msg: in
             await asyncio.sleep(1)  # ~25 messages per second, safely under Telegram limits
 
     done = 0
-    async for doc in db.users_col.find({}, {'_id': 1}):
+    async for doc in db.users_col.find(db.BC_FILTERS.get(pb.get('target', 'all'), {}), {'_id': 1}):
         batch.append(doc['_id'])
         if len(batch) >= 25:
             await flush()

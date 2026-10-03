@@ -32,7 +32,7 @@ def sample(doc):
 async def migrate(db, apply=False, fsub=False, now=None, out=print):
     import time
     now = now or int(time.time())
-    report = {'premium': 0, 'premium_expired': 0, 'banned': 0, 'fsub': 0}
+    report = {'premium': 0, 'premium_expired': 0, 'banned': 0, 'fsub': 0, 'ever_verified': 0}
 
     # ---- premium: old 'premium-users' {user_id, expiration_timestamp ISO}  ->  'premium_users' {_id, expire_at epoch}
     async for d in db['premium-users'].find({}):
@@ -60,6 +60,17 @@ async def migrate(db, apply=False, fsub=False, now=None, out=print):
         report['banned'] += 1
         if apply:
             await db['banned_users'].update_one({'_id': uid}, {'$set': {'banned': True}}, upsert=True)
+
+    # ---- old 'users.verify_status' -> ever_verified flag (users who verified at least once)
+    q = {'$or': [{'verify_status.is_verified': True},
+                 {'verify_status.verified_time': {'$exists': True, '$nin': ['', 0, None]}}]}
+    report['ever_verified'] = await db['users'].count_documents({**q, 'ever_verified': {'$ne': True}})
+    if apply:
+        await db['users'].update_many(q, {'$set': {'ever_verified': True}})
+    # users that have/had premium
+    async for d in db['premium-users'].find({}, {'user_id': 1}):
+        if isinstance(d.get('user_id'), int) and apply:
+            await db['users'].update_one({'_id': d['user_id']}, {'$set': {'ever_premium': True}}, upsert=True)
 
     # ---- force-sub channel IDs (opt-in, structure of the old collections is not guaranteed)
     ids = set()
@@ -90,6 +101,7 @@ async def main():
     r = await migrate(db, apply, fsub)
     print(f"premium to copy: {r['premium']} (already expired, skipped: {r['premium_expired']})")
     print(f"banned users to copy: {r['banned']}")
+    print(f"users who verified at least once (old bot): {r['ever_verified']}")
     print(f"force-sub IDs found: {r['fsub']}" + ("  (copied)" if fsub and apply else "  (use --apply --fsub to copy)"))
     if not apply:
         print("\nNothing was written. Run again with --apply to copy.")

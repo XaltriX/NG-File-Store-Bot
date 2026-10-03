@@ -4,7 +4,6 @@ import string
 import secrets
 from config import Config
 from utils.helpers import ist_date, ist_midnight, trial_info
-from utils.i18n import PREMIUM_CARD_EN, PREMIUM_CARD_HI
 
 class Database:
     def __init__(self):
@@ -31,6 +30,7 @@ class Database:
         self.vlog_col = self.db1.verify_logs
         self.stats_col = self.db1.daily_stats
         self.pay_col = self.db1.payments
+        self.sync_out = self.db1.sync_outbox
 
         self.files_col2 = None
         if Config.MONGO_URI_2:
@@ -91,6 +91,7 @@ class Database:
             {'$set': {'expire_at': expire_at, 'daily_limit': daily_limit, 'used_today': 0, 'last_date': '', 'n3': False, 'n1': False}}, 
             upsert=True
         )
+        await self.mark_ever(user_id, 'ever_premium')
         
     async def remove_premium(self, user_id: int):
         await self.premium_col.delete_one({'_id': user_id})
@@ -352,8 +353,9 @@ class Database:
             'preview_link': 'https://t.me/+xlTrZ9h4Ngg2Yjg8',
             'proofs_link': 'https://t.me/+YKC50zCkuqU0ZjM0',
             'qr_link': 'https://t.me/NgPremiumX/13',
-            'prem_msg': PREMIUM_CARD_EN,
-            'prem_msg_hi': PREMIUM_CARD_HI,
+            'card_custom_en': '', 'card_custom_hi': '',
+            'sync_enabled': False, 'sync_url': '', 'sync_db': 'sync_mailbox', 'partner_username': '',
+            'sync_last_ok': 0, 'sync_err': '',
             'payment_info': 'Sᴇɴᴅ ᴍᴏɴᴇʏ ᴛᴏ Bᴋᴀsʜ/Nᴀɢᴀᴅ ᴀɴᴅ ᴄᴏɴᴛᴀᴄᴛ Aᴅᴍɪɴ ᴡɪᴛʜ Sᴄʀᴇᴇɴsʜᴏᴛ.'
         }
         
@@ -505,6 +507,7 @@ class Database:
     async def log_verify(self, user_id: int, sl: int = 1):
         today = ist_date()
         await self._cleanup_daily(today)
+        await self.mark_ever(user_id, 'ever_verified')
         await self.vlog_col.update_one(
             {'_id': f"{today}_{user_id}_{sl}"},
             {'$setOnInsert': {'date': today, 'u': user_id, 's': sl}},
@@ -611,6 +614,7 @@ class Database:
             {'$set': {'expire_at': expire_at, 'daily_limit': 0, 'used_today': 0, 'last_date': '', 'n3': False, 'n1': False}},
             upsert=True
         )
+        await self.mark_ever(user_id, 'ever_premium')
         return expire_at
 
     # ================= Reminders =================
@@ -677,6 +681,89 @@ class Database:
             await self.users_col.update_one({'_id': user_id}, {'$set': {'pay_plan': plan_id, 'pay_ts': int(time.time())}}, upsert=True)
         else:
             await self.users_col.update_one({'_id': user_id}, {'$unset': {'pay_plan': ''}})
+
+
+    # ================= Lifetime flags (never deleted) =================
+    async def mark_ever(self, user_id: int, field: str):
+        await self.users_col.update_one({'_id': user_id}, {'$set': {field: True}}, upsert=True)
+
+    async def backfill_flags(self):
+        """One-time: flag everyone who is/was premium or verified (incl. old rohit_1888 'verify_status')."""
+        s = await self.get_settings()
+        if s.get('flags_backfilled'):
+            return
+        for col, field in ((self.premium_col, 'ever_premium'), (self.verified_col, 'ever_verified')):
+            async for d in col.find({}, {'_id': 1}):
+                await self.mark_ever(d['_id'], field)
+        await self.users_col.update_many(
+            {'$or': [{'verify_status.is_verified': True},
+                     {'verify_status.verified_time': {'$exists': True, '$nin': ['', 0, None]}}]},
+            {'$set': {'ever_verified': True}}
+        )
+        await self.update_settings('flags_backfilled', True)
+
+    async def premium_stats(self):
+        now = int(time.time())
+        cur = await self.premium_col.count_documents({'expire_at': {'$gt': now}})
+        ever = await self.users_col.count_documents({'ever_premium': True})
+        return cur, max(ever, cur)
+
+    async def verified_stats(self, credit_mode: bool = False):
+        ever = await self.users_col.count_documents({'ever_verified': True})
+        if credit_mode:
+            cur = await self.users_col.count_documents({'credits': {'$gt': 0}})
+        else:
+            cur = await self.verified_col.count_documents({'expire_at': {'$gt': int(time.time())}})
+        return cur, max(ever, cur)
+
+    # ================= Premium list =================
+    async def premium_counts(self):
+        now = int(time.time())
+        active = await self.premium_col.count_documents({'expire_at': {'$gt': now}})
+        soon = await self.premium_col.count_documents({'expire_at': {'$gt': now, '$lte': now + 3 * 86400}})
+        return active, soon
+
+    async def premium_docs(self, tab: str, page: int, per: int = 8):
+        now = int(time.time())
+        q = {'expire_at': {'$gt': now}} if tab == 'active' else {'expire_at': {'$gt': now, '$lte': now + 3 * 86400}}
+        return await self.premium_col.find(q).sort('expire_at', 1).skip(page * per).limit(per).to_list(length=per)
+
+    # ================= Broadcast targets =================
+    BC_FILTERS = {'all': {}, 'prem': {'ever_premium': True}, 'ver': {'ever_verified': True}}
+
+    async def target_count(self, target: str):
+        return await self.users_col.count_documents(self.BC_FILTERS.get(target, {}))
+
+    # ================= Pending payments =================
+    async def pending_count(self):
+        return await self.pay_col.count_documents({'status': 'pending'})
+
+    async def pending_list(self, limit: int = 6):
+        return await self.pay_col.find({'status': 'pending'}).sort('ts', -1).limit(limit).to_list(length=limit)
+
+    # ================= Partner sync outbox =================
+    async def sync_queue(self, user_id: int, days: int, ref: str):
+        s = await self.get_settings()
+        if not (s.get('sync_enabled') and s.get('sync_url')):
+            return False
+        await self.sync_out.update_one(
+            {'_id': ref},
+            {'$setOnInsert': {'u': user_id, 'days': int(days), 'ts': int(time.time()), 'sent': False}},
+            upsert=True
+        )
+        return True
+
+    async def sync_unsent(self, limit: int = 50):
+        return await self.sync_out.find({'sent': False}).limit(limit).to_list(length=limit)
+
+    async def sync_mark_sent(self, ref: str):
+        await self.sync_out.update_one({'_id': ref}, {'$set': {'sent': True, 'sent_at': int(time.time())}})
+
+    async def sync_pending_count(self):
+        return await self.sync_out.count_documents({'sent': False})
+
+    async def sync_cleanup(self, before_ts: int):
+        await self.sync_out.delete_many({'sent': True, 'sent_at': {'$lt': before_ts}})
 
 
 db = Database()
