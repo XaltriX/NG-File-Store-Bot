@@ -32,6 +32,17 @@ PREMIUM_SOLO_HI = (
     "👇 <i>आगे बढ़ने के लिए प्लान चुनें</i>"
 )
 
+PROOF_CAPTION = (
+    "╔═══ ✦ 𝗣𝗥𝗘𝗠𝗜𝗨𝗠 𝗔𝗖𝗧𝗜𝗩𝗔𝗧𝗘𝗗 ✦ ═══╗\n\n"
+    "🎉 <b>𝗡𝗲𝘄 𝗣𝗿𝗲𝗺𝗶𝘂𝗺 𝗠𝗲𝗺𝗯𝗲𝗿 𝗝𝗼𝗶𝗻𝗲𝗱!</b>\n\n"
+    "▌ 👤 <b>Member</b> ➜ {name}\n"
+    "▌ 🪙 <b>Plan</b> ➜ {plan}\n"
+    "▌ 📅 <b>Validity</b> ➜ {days} Days\n"
+    "▌ 🤖 <b>Bots</b> ➜ {bots}\n\n"
+    "🚫 𝗡𝗼 𝗮𝗱𝘀 · ✅ 𝗡𝗼 𝘃𝗲𝗿𝗶𝗳𝗶𝗰𝗮𝘁𝗶𝗼𝗻 · ⚡ 𝗗𝗶𝗿𝗲𝗰𝘁 𝘃𝗶𝗱𝗲𝗼𝘀\n\n"
+    "✨ <i>Your turn could be next. Get Premium and watch without limits!</i>"
+)
+
 REMINDER_EN = ("👋 <b>Still looking for more?</b>\n\nYour free access is one tap away. "
                "Verify in seconds, or go Premium for instant, ad-free files.")
 REMINDER_HI = ("👋 <b>और फ़ाइलें चाहिए?</b>\n\nआपका फ्री एक्सेस बस एक टैप दूर है। "
@@ -51,6 +62,8 @@ STR = {
         'b_change': '🔄 Change Plan', 'b_cancel': '✖️ Cancel', 'b_renew': '🔁 Renew', 'b_upgrade': '⬆️ Upgrade Plan',
         'b_contact': '🛟 Contact Support',
         'b_contact_owner': '💬 Contact Owner',
+        'b_share': '📤 Share this',
+        'share_text': '🎬 Watch this on Telegram!',
         'status': '📋 <b>YOUR STATUS</b>\n\n<blockquote>💎 <b>Plan:</b> {plan}\n🎁 <b>Trial:</b> {trial}\n🔓 <b>Access:</b> {access}\n📥 <b>Free links today:</b> {free}</blockquote>',
         'st_free': "Free", 'st_prem': "Premium · till {date}",
         'st_trial_on': "Day {day}/{days} · {left}/{daily} links left today",
@@ -94,6 +107,8 @@ STR = {
         'b_change': '🔄 प्लान बदलें', 'b_cancel': '✖️ रद्द करें', 'b_renew': '🔁 रिन्यू करें', 'b_upgrade': '⬆️ प्लान अपग्रेड करें',
         'b_contact': '🛟 सपोर्ट से संपर्क करें',
         'b_contact_owner': '💬 ओनर से संपर्क करें',
+        'b_share': '📤 दोस्तों को शेयर करें',
+        'share_text': '🎬 इसे टेलीग्राम पर देखें!',
         'status': '📋 <b>आपकी स्थिति</b>\n\n<blockquote>💎 <b>प्लान:</b> {plan}\n🎁 <b>ट्रायल:</b> {trial}\n🔓 <b>एक्सेस:</b> {access}\n📥 <b>आज के फ्री लिंक:</b> {free}</blockquote>',
         'st_free': "फ्री", 'st_prem': "प्रीमियम · {date} तक",
         'st_trial_on': "दिन {day}/{days} · आज {left}/{daily} लिंक बाकी",

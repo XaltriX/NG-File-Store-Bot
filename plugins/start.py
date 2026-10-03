@@ -2,6 +2,7 @@ import time
 import asyncio
 import random
 import base64
+from urllib.parse import quote
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery, LinkPreviewOptions
 from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate, ChatAdminRequired
@@ -14,6 +15,7 @@ from utils.shortlink_guard import ShortlinkGuard
 from script import Script
 from utils.i18n import tr
 from utils.ui import welcome_view, status_view, show
+from utils.prem import plans_view
 
 FILE_CACHE = {}
 MAX_CACHE_SIZE = 50
@@ -97,6 +99,20 @@ async def delete_after_delay(client, chat_id, message_ids, delay):
     except Exception:
         pass
 
+async def build_share_markup(client: Client, chat_id: int, payload: str, settings: dict):
+    """One 'Share this' button that opens Telegram's share sheet with this post's link."""
+    if not settings.get('share_button', True):
+        return None
+    username = bot_username_of(client)
+    if not username:
+        return None
+    user = await db.get_user(chat_id) or {}
+    lang = user.get('lang') or 'en'
+    link = f"https://t.me/{username}?start={payload}"
+    url = "https://t.me/share/url?url=" + quote(link, safe='') + "&text=" + quote(tr(lang, 'share_text'), safe='')
+    return InlineKeyboardMarkup([[InlineKeyboardButton(tr(lang, 'b_share'), url=url)]])
+
+
 async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=None):
     unique_id = payload
         
@@ -113,6 +129,7 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
         settings = await db.get_settings()
         auto_delete_time = settings.get('auto_delete', 0)
         is_protected = settings.get('protect_content', False)
+        share_mk = await build_share_markup(client, chat_id, unique_id, settings)
 
         if file_data.get('t') == 'b':
             if 'files' in file_data:
@@ -169,9 +186,9 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                     return
                 
                 if auto_delete_time > 0:
-                    success_msg = await client.send_message(chat_id, Script.BATCH_SUCCESS_WARN.format(auto_delete_time=auto_delete_time))
+                    success_msg = await client.send_message(chat_id, Script.BATCH_SUCCESS_WARN.format(auto_delete_time=auto_delete_time), reply_markup=share_mk)
                     sent_msg_ids.append(success_msg.id)
-                else: await client.send_message(chat_id, Script.BATCH_SUCCESS)
+                else: await client.send_message(chat_id, Script.BATCH_SUCCESS, reply_markup=share_mk)
                 
             else:
                 # NORMAL BATCH MODE (Legacy)
@@ -213,9 +230,9 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                     return
                 
                 if auto_delete_time > 0:
-                    success_msg = await client.send_message(chat_id, Script.BATCH_SUCCESS_WARN.format(auto_delete_time=auto_delete_time))
+                    success_msg = await client.send_message(chat_id, Script.BATCH_SUCCESS_WARN.format(auto_delete_time=auto_delete_time), reply_markup=share_mk)
                     sent_msg_ids.append(success_msg.id)
-                else: await client.send_message(chat_id, Script.BATCH_SUCCESS)
+                else: await client.send_message(chat_id, Script.BATCH_SUCCESS, reply_markup=share_mk)
                 
         else:
             if 'f' in file_data:
@@ -280,6 +297,9 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
             
             if sent_m and hasattr(sent_m, "id"): 
                 sent_msg_ids.append(sent_m.id)
+                if share_mk and getattr(sent_m, "media", None):
+                    try: await client.edit_message_reply_markup(chat_id, sent_m.id, share_mk)
+                    except Exception: pass
                 if auto_delete_time > 0:
                     warn_msg = await client.send_message(chat_id, Script.SINGLE_SUCCESS_WARN.format(auto_delete_time=auto_delete_time))
                     sent_msg_ids.append(warn_msg.id)
@@ -436,6 +456,13 @@ async def send_welcome(client: Client, chat_id: int, user_id: int, mention: str,
     await client.send_message(chat_id, text, reply_markup=markup, parse_mode=ParseMode.HTML, link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 
+async def send_premium_screen(client: Client, chat_id: int, user_id: int, settings: dict):
+    user = await db.get_user(user_id) or {}
+    text, markup = plans_view(settings, user.get('lang') or 'en', bot_username_of(client))
+    await client.send_message(chat_id, text, reply_markup=markup, parse_mode=ParseMode.HTML,
+                              link_preview_options=LinkPreviewOptions(is_disabled=True))
+
+
 def language_keyboard():
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("English", callback_data="u:setlang:en"),
@@ -526,6 +553,10 @@ async def start_command(client: Client, message: Message):
                 await message.reply_text(Script.VERIFY_INVALID)
             return
 
+        elif payload == "premium":
+            await send_premium_screen(client, message.chat.id, user_id, settings)
+            return
+
         elif payload == "getverify":
             await db.bump_stat('reminder_clicks')
             active = (is_admin or await db.premium_expire(user_id) or not settings.get('shortlink_status'))
@@ -585,6 +616,9 @@ async def check_fsub_callback(client: Client, query: CallbackQuery):
     is_admin = await db.is_admin(user_id)
     if settings.get('mode') == 'private' and not is_admin:
         return await client.send_message(chat_id, Script.PRIVATE_MODE_MSG)
+
+    if payload == "premium":
+        return await send_premium_screen(client, chat_id, user_id, settings)
 
     user = await db.get_user(user_id) or {}
     lang = user.get('lang') or 'en'

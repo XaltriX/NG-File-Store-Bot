@@ -43,6 +43,32 @@ def sync_active(settings):
     return bool(settings.get('sync_enabled') and settings.get('sync_url') and settings.get('partner_username'))
 
 
+def proof_ready(settings):
+    return bool(settings.get('proof_enabled', True) and int(settings.get('proof_chat') or 0))
+
+
+def pay_keyboard(settings, pid, selected_id, post_on):
+    """Buttons under a payment request: proof toggle, approve (selected plan first), other plans, reject."""
+    rows = []
+    if proof_ready(settings):
+        rows.append([btn(f"📢 Post proof: {'ON ✅' if post_on else 'OFF ❌'}", f"paypost:{pid}")])
+    sel = find_plan(settings, selected_id)
+    if sel:
+        rows.append([btn(f"✅ Approve {plan_label(sel)}", f"payok:{pid}:{sel['id']}")])
+    row = []
+    for p in settings.get('premium_plans', []):
+        if sel and p['id'] == sel['id']:
+            continue
+        row.append(btn(plan_label(p), f"payok:{pid}:{p['id']}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([btn("❌ Reject", f"payno:{pid}")])
+    return kb(rows)
+
+
 # ---------------- user-facing plans screen ----------------
 def render_card(settings, lang, me=None):
     custom = settings.get('card_custom_hi' if lang == 'hi' else 'card_custom_en')

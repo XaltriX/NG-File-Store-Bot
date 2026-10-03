@@ -11,6 +11,7 @@ from utils.database import db
 from utils.helpers import clean_url, mask, ist_str, trial_info
 from utils.stats_ui import build_stats_text
 from utils.prem import premium_list_view, pending_view, fmt_age
+from utils.proof import post_proof
 from utils import sync as syncmod
 from utils.ui import btn, kb, show, edit_by_id
 
@@ -87,7 +88,7 @@ async def scr_tp(s):
     rows = [
         [btn("🎁 Trial & free links", "ap:tr")],
         [btn("🪙 Plans & prices", "ap:pl"), btn("🧾 Card & payment", "ap:pc")],
-        [btn("🔗 Partner bot", "ap:pt")],
+        [btn("🔗 Partner bot", "ap:pt"), btn("📢 Proof channel", "ap:pf")],
         [btn("⬅️ Back", "ap:home")],
     ]
     return "💎 <b>TRIAL & PREMIUM</b>\n\n<blockquote>Choose what you want to edit.</blockquote>", kb(rows)
@@ -189,6 +190,27 @@ async def scr_broadcast(s):
     return text, kb(rows)
 
 
+async def scr_proof(s):
+    chat = int(s.get('proof_chat') or 0)
+    on = s.get('proof_enabled', True)
+    text = (
+        "📢 <b>PROOF CHANNEL</b>\n\n<blockquote>"
+        f"Status: <b>{'ON' if on else 'OFF'}</b>{'' if chat else ' (no channel set yet)'}\n"
+        f"Channel ID: <code>{chat or 'not set'}</code>\n"
+        f"Caption: <b>{'custom' if s.get('proof_caption') else 'default'}</b></blockquote>\n\n"
+        "<i>When you approve a payment, its screenshot is posted here with the member's name, plan and validity, "
+        "plus Buy Premium and Contact buttons. Make this bot an admin of the channel. On every payment request "
+        "you can switch the post OFF before approving.</i>"
+    )
+    rows = [
+        [btn(f"Proof: {onoff(on)}", "ap:t:proof")],
+        [btn("Channel ID", "ap:in:proof_chat"), btn("Caption", "ap:in:proof_cap")],
+        [btn("🧪 Send test post", "ap:xt")],
+        [btn("⬅️ Back", "ap:tp")],
+    ]
+    return text, kb(rows)
+
+
 async def scr_partner(s):
     on = bool(s.get('sync_enabled'))
     pend = await db.sync_pending_count()
@@ -196,12 +218,26 @@ async def scr_partner(s):
     err = s.get('sync_err')
     status = f"⚠️ {html.escape(err)}" if err else ("✅ OK" if (on and last) else "—")
     partner = s.get('partner_username')
+    tick = s.get('sync_tick', 0)
+    worker = (f"✅ running ({fmt_age(time.time() - tick)})" if tick and time.time() - tick < 120
+              else ("❌ not running" if tick else "⏳ starting"))
+    seen = await syncmod.partner_seen(s)
+    if seen is None:
+        pw = "—"
+    elif seen == 0:
+        pw = "❌ not seen yet (open its Partner screen and turn Sync ON)"
+    elif time.time() - seen < 120:
+        pw = f"✅ active ({fmt_age(time.time() - seen)})"
+    else:
+        pw = f"⚠️ last seen {fmt_age(time.time() - seen)}"
     text = (
         "🔗 <b>PARTNER BOT</b>\n\n<blockquote>"
         f"Sync: <b>{'ON' if on else 'OFF'}</b>\n"
         f"Mailbox: <code>{html.escape(syncmod.host_of(s.get('sync_url')))}</code>\n"
         f"DB name: <code>{html.escape(s.get('sync_db') or 'sync_mailbox')}</code>\n"
         f"Partner: {'@' + html.escape(partner) if partner else 'not set'}\n"
+        f"This bot's worker: {worker}\n"
+        f"Partner bot's worker: {pw}\n"
         f"Waiting to send: <b>{pend}</b> · Last sync: <b>{fmt_age(time.time() - last) if last else 'never'}</b>\n"
         f"Status: {status}</blockquote>\n\n"
         "<i>Premium you give here is also given in the partner bot. "
@@ -211,6 +247,7 @@ async def scr_partner(s):
         [btn(f"Sync: {onoff(on)}", "ap:t:sync")],
         [btn("Mailbox URL", "ap:in:sync_url"), btn("DB name", "ap:in:sync_db")],
         [btn("Partner @username", "ap:in:sync_partner"), btn("🧪 Test connection", "ap:tc")],
+        [btn("🔄 Sync now", "ap:sn")],
         [btn("⬅️ Back", "ap:tp")],
     ]
     return text, kb(rows)
@@ -233,7 +270,8 @@ async def scr_general(s):
     rows = [
         [btn(f"Mode: {s.get('mode', 'public')}", "ap:t:mode"),
          btn(f"Protect: {onoff(s.get('protect_content'))}", "ap:t:prot")],
-        [btn(f"Auto-delete: {str(ad) + 'm' if ad else 'OFF'}", "ap:c:ad")],
+        [btn(f"Auto-delete: {str(ad) + 'm' if ad else 'OFF'}", "ap:c:ad"),
+         btn(f"Share button: {onoff(s.get('share_button', True))}", "ap:t:share")],
         [btn("DB channel", "ap:in:gen_db"), btn("Log channel", "ap:in:gen_log")],
         [btn("⬅️ Back", "ap:home")],
     ]
@@ -246,7 +284,7 @@ async def build_screen(screen, s):
         return await scr_shortner(s, arg)
     table = {'home': scr_home, 'v': scr_verify, 'tp': scr_tp, 'tr': scr_trial, 'pl': scr_plans,
              'pc': scr_card, 'r': scr_reminders, 'u': scr_users, 'bc': scr_broadcast,
-             'st': scr_stats, 'g': scr_general, 'pt': scr_partner}
+             'st': scr_stats, 'g': scr_general, 'pt': scr_partner, 'pf': scr_proof}
     return await table.get(name, scr_home)(s)
 
 
@@ -255,6 +293,8 @@ TOGGLES = {  # key -> (setting, default, screen)
     'sl': ('shortlink_status', False, 'v'), 'wg': ('web_guard', False, 'v'), 'dual': ('dual_shortner', False, 'v'),
     'tri': ('trial_enabled', True, 'tr'), 'rem': ('reminder_enabled', True, 'r'), 'qh': ('quiet_hours', True, 'r'),
     'prot': ('protect_content', False, 'g'),
+    'share': ('share_button', True, 'g'),
+    'proof': ('proof_enabled', True, 'pf'),
 }
 CYCLES = {  # key -> (setting, values, default, screen)
     'dur': ('verify_duration', [1, 4, 8, 16, 24, 48], 24, 'v'),
@@ -295,6 +335,8 @@ PROMPTS = {
     'gen_log': ("Send the log channel ID, like <code>-100xxxxxxxxxx</code>.", 'g'),
     'sync_url': ("Send the <b>Mailbox MongoDB URL</b> (starts with <code>mongodb</code>). Both bots must use the same one. Your message is deleted right after.", 'pt'),
     'sync_db': ("Send the <b>Mailbox DB name</b> (letters, numbers, _ or -). Both bots must use the same name. Default: <code>sync_mailbox</code>", 'pt'),
+    'proof_chat': ("Send the <b>proof channel ID</b>, like <code>-100xxxxxxxxxx</code>. This bot must be an admin there.", 'pf'),
+    'proof_cap': ("Send the new proof caption (HTML allowed).\nPlaceholders: <code>{name}</code> <code>{plan}</code> <code>{days}</code> <code>{bots}</code>\nSend <code>default</code> to go back to the built-in caption.", 'pf'),
     'sync_partner': ("Send the <b>partner bot's @username</b>.", 'pt'),
 }
 LINK_FIELDS = {'qr_link': 'qr_link', 'info_link': 'info_link', 'preview_link': 'preview_link', 'proofs_link': 'proofs_link'}
@@ -416,6 +458,27 @@ async def panel_cb(client: Client, query: CallbackQuery):
         ok, info = await syncmod.test_connection(client)
         await query.answer("Connected ✅" if ok else "Connection failed ❌", show_alert=not ok)
         return await render(client, chat_id, msg_id, 'pt', ("✅ " if ok else "⚠️ ") + html.escape(info))
+
+    if act == 'xt':
+        chat = int(s.get('proof_chat') or 0)
+        if not chat:
+            return await query.answer("Set the channel ID first.", show_alert=True)
+        plan = (s.get('premium_plans') or [{'name': '1 Month', 'days': 30}])[0]
+        posted, err = await post_proof(client, s, {'name': 'Test Member'}, plan)
+        await query.answer("Posted ✅" if posted else "Failed ❌", show_alert=not posted)
+        note = "✅ Test post sent to the channel." if posted else f"⚠️ Could not post ({html.escape(err)}). Make this bot an admin there and check the ID."
+        return await render(client, chat_id, msg_id, 'pf', note)
+
+    if act == 'sn':
+        try:
+            sent, got = await syncmod.sync_once(client, force=True)
+            note = f"✅ Sync done. Sent {sent} · Received {got}"
+            if not s.get('sync_enabled'):
+                note += "\n⚠️ Sync is still OFF, so this only runs when you tap this button."
+        except Exception as e:
+            note = f"⚠️ {html.escape(type(e).__name__)}: {html.escape(str(e)[:120])}"
+        await query.answer("Done")
+        return await render(client, chat_id, msg_id, 'pt', note)
 
     if act == 'bm':
         vals = [0, 5, 10, 30, 60]
@@ -543,6 +606,17 @@ async def apply_input(message: Message, field: str):
             return "That does not look like a bot username.", None
         await db.update_settings('partner_username', name)
         return None, "✅ Partner saved."
+
+    if field == 'proof_chat':
+        try:
+            cid = int(raw)
+        except ValueError:
+            return "Channel ID must be a number like -100123456789.", None
+        await db.update_settings('proof_chat', cid)
+        return None, "✅ Proof channel saved."
+    if field == 'proof_cap':
+        await db.update_settings('proof_caption', '' if raw.lower() == 'default' else rich)
+        return None, "✅ Caption saved."
 
     if field == 'upi':
         await db.update_settings('upi_id', raw)

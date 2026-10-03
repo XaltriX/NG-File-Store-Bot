@@ -1,14 +1,16 @@
 import html
 import time
 from pyrogram import Client, filters
-from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message, CallbackQuery
 from pyrogram.enums import ParseMode
 from config import Config
 from utils.database import db
 from utils.helpers import clean_url, ist_str
 from utils.i18n import tr
-from utils.prem import (plan_label, find_plan, contact_row, plans_view, pending_view)
+from utils.prem import (plan_label, find_plan, contact_row, plans_view, pending_view, pay_keyboard, proof_ready)
+from utils.proof import post_proof
 from utils.ui import btn, kb, show
+from utils import sync as sy
 
 
 # ================= Helpers (shared, see utils/prem.py) =================
@@ -126,26 +128,26 @@ async def screenshot_handler(client: Client, message: Message):
         await message.reply_text(tr(lang, 'ss_pending'))
         message.stop_propagation()
 
-    pay_id = await db.create_payment(user_id, plan)
+    name = (message.from_user.first_name or '').strip()
+    if getattr(message.from_user, 'last_name', None):
+        name += ' ' + message.from_user.last_name.strip()
+    name = name[:40] or 'Member'
+    if message.photo:
+        fid, ftype = message.photo.file_id, 'photo'
+    else:
+        fid, ftype = message.document.file_id, 'document'
+    post_on = proof_ready(settings)
+    pay_id = await db.create_payment(user_id, plan, {'name': name, 'fid': fid, 'ftype': ftype, 'post_proof': post_on})
     caption = (
         "💳 <b>NEW PAYMENT REQUEST</b>\n\n"
         f"👤 {message.from_user.mention} · <code>{user_id}</code>\n"
         f"📦 Selected: <b>{html.escape(plan_label(plan))}</b>\n\n"
         "<i>Check the screenshot, then approve the amount actually paid.</i>"
     )
-    rows = [[InlineKeyboardButton(f"✅ Approve {plan_label(plan)}", callback_data=f"payok:{pay_id}:{plan['id']}")]]
-    others, row = [p for p in settings.get('premium_plans', []) if p['id'] != plan['id']], []
-    for p in others:
-        row.append(InlineKeyboardButton(plan_label(p), callback_data=f"payok:{pay_id}:{p['id']}"))
-        if len(row) == 2:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
-    rows.append([InlineKeyboardButton("❌ Reject", callback_data=f"payno:{pay_id}")])
+    markup = pay_keyboard(settings, pay_id, plan['id'], post_on)
 
     try:
-        await message.copy(Config.OWNER_ID, caption=caption, reply_markup=InlineKeyboardMarkup(rows), parse_mode=ParseMode.HTML)
+        await message.copy(Config.OWNER_ID, caption=caption, reply_markup=markup, parse_mode=ParseMode.HTML)
     except Exception:
         await message.reply_text(tr(lang, 'rejected'))
         message.stop_propagation()
@@ -157,6 +159,24 @@ async def screenshot_handler(client: Client, message: Message):
 
 
 # ================= Admin approval =================
+@Client.on_callback_query(filters.regex(r"^paypost:"))
+async def pay_post_toggle(client: Client, query: CallbackQuery):
+    if not await db.is_admin(query.from_user.id):
+        return await query.answer()
+    pid = query.data.split(":")[1]
+    pay = await db.get_payment(pid)
+    if not pay or pay.get('status') != 'pending':
+        return await query.answer("Already handled.", show_alert=True)
+    new = not pay.get('post_proof', False)
+    await db.set_payment_post(pid, new)
+    settings = await db.get_settings()
+    try:
+        await query.message.edit_reply_markup(pay_keyboard(settings, pid, pay['plan'], new))
+    except Exception:
+        pass
+    await query.answer("Proof post ON" if new else "Proof post OFF: it will not be posted")
+
+
 def is_list_message(msg):
     """True for the text-only 'Pending payments' list (the original payment request is a photo/document)."""
     return not (msg.photo or msg.document or msg.video)
@@ -195,7 +215,20 @@ async def pay_ok_cb(client: Client, query: CallbackQuery):
         pass
 
     queued = await db.sync_queue(buyer, plan['days'], f"pay_{pay_id}")
-    note = " · sent to partner bot" if queued else ""
+    left = 0
+    if queued:
+        await sy.push_now(client)
+        left = await db.sync_pending_count()
+        note = " · sent to partner bot" if not left else " · partner sync queued"
+        alert = " Partner bot notified." if not left else " Partner sync queued."
+    else:
+        note = " · ⚠️ partner sync is OFF" if settings.get('sync_url') else ""
+        alert = " (Partner sync is OFF)" if settings.get('sync_url') else ""
+
+    if pay.get('post_proof') and proof_ready(settings):
+        posted, err = await post_proof(client, settings, pay, plan)
+        note += " · 📢 proof posted" if posted else f" · ⚠️ proof NOT posted ({err})"
+        alert += " Proof posted." if posted else f" Proof NOT posted ({err})."
 
     if is_list_message(query.message):
         ptext, pmarkup = await pending_view()
@@ -207,7 +240,7 @@ async def pay_ok_cb(client: Client, query: CallbackQuery):
                                              parse_mode=ParseMode.HTML)
         except Exception:
             pass
-    await query.answer("Premium activated." + (" Partner sync queued." if queued else ""))
+    await query.answer("Premium activated." + alert)
 
 
 @Client.on_callback_query(filters.regex(r"^payno:"))
@@ -272,7 +305,8 @@ async def add_premium_cmd(client: Client, message: Message):
                                       reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
         except Exception:
             pass
-        await db.sync_queue(user_id, days, f"m{user_id}_{int(time.time())}")
+        if await db.sync_queue(user_id, days, f"m{user_id}_{int(time.time())}"):
+            await sy.push_now(client)
     except ValueError:
         await message.reply_text("❌ ID and days must be numbers!")
 

@@ -48,6 +48,7 @@ def forget_client(url=None):
 
 async def push_pending(client, box):
     my_id = client.me.id
+    n = 0
     for o in await db.sync_unsent(50):
         await box.update_one(
             {'_id': o['_id']},
@@ -55,11 +56,14 @@ async def push_pending(client, box):
             upsert=True
         )
         await db.sync_mark_sent(o['_id'])
+        n += 1
+    return n
 
 
 async def pull_incoming(client, box, settings):
     my_id = client.me.id
     now = int(time.time())
+    applied = 0
     query = {'src': {'$ne': my_id}, 'done_by': {'$ne': my_id}, 'ping': {'$ne': True},
              'ts': {'$gt': now - KEEP_DAYS * 86400}}
     for d in await box.find(query).limit(50).to_list(50):
@@ -73,6 +77,8 @@ async def pull_incoming(client, box, settings):
         except Exception:
             await box.update_one({'_id': d['_id']}, {'$pull': {'done_by': my_id}})  # retry next round
             raise
+        applied += 1
+        print(f"🔁 Sync: granted {d['days']} day(s) premium to {d['u']} (from partner bot)")
         user = await db.get_user(d['u']) or {}
         lang = user.get('lang') or 'en'
         plan = f"{d['days']} दिन" if lang == 'hi' else f"{d['days']} days"
@@ -82,6 +88,53 @@ async def pull_incoming(client, box, settings):
                                       reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
         except Exception:
             pass  # user never started this bot or blocked it: premium is still active
+    return applied
+
+
+async def sync_once(client, force=False):
+    """One full round: send my pending grants, read the partner's, leave a heartbeat. Returns (sent, received)."""
+    s = await db.get_settings()
+    if not s.get('sync_url'):
+        raise ValueError("Set the Mailbox URL first.")
+    if not (force or s.get('sync_enabled')):
+        return 0, 0
+    box = mailbox(s)
+    my_id = client.me.id
+    pushed = await push_pending(client, box)
+    pulled = await pull_incoming(client, box, s)
+    await box.update_one(
+        {'_id': f'hb_{my_id}'},
+        {'$set': {'hb': True, 'ping': True, 'src': my_id, 'ts': int(time.time()), 'done_by': [my_id]}},
+        upsert=True
+    )
+    if pushed:
+        print(f"🔁 Sync: sent {pushed} premium grant(s) to the mailbox")
+    return pushed, pulled
+
+
+async def push_now(client):
+    """Best effort right after an approval so the partner does not wait for the next round."""
+    try:
+        s = await db.get_settings()
+        if not (s.get('sync_enabled') and s.get('sync_url')):
+            return 0
+        return await push_pending(client, mailbox(s))
+    except Exception as e:
+        print(f"Sync push_now will retry later: {type(e).__name__}")
+        return 0
+
+
+async def partner_seen(settings):
+    """Unix time of the partner bot's last heartbeat, 0 = never seen, None = unknown/unreachable."""
+    me = settings.get('my_bot_id')
+    if not (settings.get('sync_url') and me):
+        return None
+    try:
+        box = mailbox(settings)
+        d = await asyncio.wait_for(box.find_one({'hb': True, 'src': {'$ne': me}}, sort=[('ts', -1)]), 4)
+        return d.get('ts', 0) if d else 0
+    except Exception:
+        return None
 
 
 async def test_connection(client):
@@ -103,25 +156,28 @@ async def test_connection(client):
 
 
 async def sync_loop(client):
-    await asyncio.sleep(20)
-    fails, alerted, last_clean, last_write = 0, False, 0, 0
+    print("🔁 Sync worker started")
+    await asyncio.sleep(10)
+    fails, alerted, last_clean, last_tick = 0, False, 0, 0
     while True:
         try:
             s = await db.get_settings()
+            now = int(time.time())
+            if now - last_tick >= 30:                      # heartbeat so the panel can show "worker running"
+                await db.update_settings('sync_tick', now)
+                if s.get('my_bot_id') != client.me.id:
+                    await db.update_settings('my_bot_id', client.me.id)
+                last_tick = now
             if s.get('sync_enabled') and s.get('sync_url'):
                 try:
-                    box = mailbox(s)
-                    await push_pending(client, box)
-                    await pull_incoming(client, box, s)
-                    now = int(time.time())
+                    await sync_once(client)
                     if now - last_clean > 3600:
-                        await box.delete_many({'ts': {'$lt': now - KEEP_DAYS * 86400}})
+                        await mailbox(s).delete_many({'ts': {'$lt': now - KEEP_DAYS * 86400}})
                         await db.sync_cleanup(now - KEEP_DAYS * 86400)
                         last_clean = now
-                    if now - last_write > 60 or s.get('sync_err'):
-                        await db.update_settings('sync_last_ok', now)
+                    if s.get('sync_err'):
                         await db.update_settings('sync_err', '')
-                        last_write = now
+                    await db.update_settings('sync_last_ok', now) if now - (s.get('sync_last_ok') or 0) > 60 else None
                     if alerted:
                         alerted = False
                         try:
@@ -131,6 +187,7 @@ async def sync_loop(client):
                     fails = 0
                 except Exception as e:
                     fails += 1
+                    print(f"🔁 Sync error ({fails}): {type(e).__name__}: {str(e)[:120]}")
                     await db.update_settings('sync_err', f"{type(e).__name__}: {str(e)[:100]}")
                     if fails >= 3 and not alerted:
                         alerted = True

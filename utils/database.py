@@ -344,6 +344,8 @@ class Database:
             'free_daily_limit': 3,
             'premium_plans': self._default_plans(),
             'dual_shortner': False,
+            'share_button': True,
+            'proof_enabled': True, 'proof_chat': 0, 'proof_caption': '',
             'shortener2_url': '', 'shortener2_api': '', 'tutorial2_link': '',
             'trial_enabled': True, 'trial_days': 3, 'trial_daily': 5,
             'reminder_enabled': True, 'reminder_hours': 12, 'quiet_hours': True,
@@ -657,13 +659,22 @@ class Database:
         await self.premium_col.update_one({'_id': user_id}, {'$set': {f: True for f in flags}})
 
     # ================= Payments =================
-    async def create_payment(self, user_id: int, plan: dict):
+    async def create_payment(self, user_id: int, plan: dict, extra: dict = None):
         pid = secrets.token_hex(4)
-        await self.pay_col.insert_one({
+        doc = {
             '_id': pid, 'u': user_id, 'plan': plan['id'], 'price': plan['price'],
             'days': plan['days'], 'status': 'pending', 'ts': int(time.time()), 'date': ist_date()
-        })
+        }
+        if extra:
+            doc.update(extra)
+        await self.pay_col.insert_one(doc)
         return pid
+
+    async def get_payment(self, pid: str):
+        return await self.pay_col.find_one({'_id': pid})
+
+    async def set_payment_post(self, pid: str, flag: bool):
+        await self.pay_col.update_one({'_id': pid, 'status': 'pending'}, {'$set': {'post_proof': bool(flag)}})
 
     async def pending_payment(self, user_id: int, within: int = 1800):
         return await self.pay_col.find_one(

@@ -23,3 +23,20 @@ Old commands still work as hidden shortcuts. Env vars: see .env.example.
 - Premium screen: "One payment. Two bots." card (shows both bot names only while Partner sync is ON).
 - Partner bot sync through one shared mailbox MongoDB (Trial & Premium -> Partner bot). Grants only, never removals.
 - Fixed: reply_to_message_id crash on new Kurigram; owner can now test the payment flow with their own account.
+
+## Round 4 (sync made observable and robust)
+- Partner screen now shows this bot's worker status AND the partner bot's worker status (heartbeat via the mailbox).
+- "Sync now" button runs a full round instantly (works even if the toggle is OFF).
+- Approve tells you "Partner bot notified" / "queued" / "partner sync is OFF".
+- Background workers are started from the start hook AND from the first incoming update, so they cannot be missed.
+- Sync events are printed in the logs ("Sync: sent / granted / error").
+
+## Round 5
+- "Share this" button under every delivered file (single file: on the file; batch: on the final "all files sent" message). Opens Telegram's share sheet with this post's link; text is English/Hindi by user language. Toggle: Admin Panel -> General -> Share button.
+
+## Round 6 - Proof channel
+- On approve, the payment screenshot is posted to the proof channel with: member name, plan, validity (days), bots, an engagement line, and [Buy Premium][Contact] buttons side by side.
+- Each payment request has a "Post proof: ON/OFF" toggle (default ON) so you can approve without posting.
+- Admin Panel -> Trial & Premium -> Proof channel: channel ID, ON/OFF, caption editor, test post.
+- Only the bot where you approve posts. Premium granted by sync in the partner bot never posts.
+- "Buy Premium" in the channel opens the plans screen via /start premium.

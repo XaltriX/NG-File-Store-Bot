@@ -5,8 +5,7 @@ from pyrogram import Client
 from config import Config
 from server import keep_alive
 from utils.database import db
-from utils.scheduler import reminder_loop
-from utils.sync import sync_loop
+from utils.background import ensure_background
 
 # 🚀 Uvloop: The Ultimate CPU & RAM Engine
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -29,9 +28,7 @@ _orig_start = app.start
 
 async def _start_with_scheduler(*args, **kwargs):
     result = await _orig_start(*args, **kwargs)
-    loop = asyncio.get_running_loop()
-    loop.create_task(reminder_loop(app))
-    loop.create_task(sync_loop(app))
+    ensure_background(app)
     return result
 
 app.start = _start_with_scheduler
