@@ -104,8 +104,7 @@ STR = {
     },
     'hi': {
         'lang_pick': "🌐 <b>Choose your language</b>\n<b>अपनी भाषा चुनें</b>",
-        ```python
-'welcome': (
+        'welcome': (
     '✨ <b>स्वागत है, {name}!</b>\n\n'
     '<blockquote>'
     '📦 𝙁𝙞𝙡𝙚 → 𝙇𝙞𝙣𝙠 𝘽𝙤𝙩\n'
