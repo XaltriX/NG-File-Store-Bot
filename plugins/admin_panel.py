@@ -8,7 +8,8 @@ from pyrogram.enums import ParseMode
 from pyrogram.errors import FloodWait
 from config import Config
 from utils.database import db
-from utils.helpers import clean_url, mask, ist_str, trial_info
+from utils.helpers import clean_url, mask, ist_str, trial_info, week_key
+from utils.referral import MEDALS, prizes_text
 from utils.stats_ui import build_stats_text
 from utils.prem import premium_list_view, pending_view, fmt_age
 from utils.proof import post_proof
@@ -89,6 +90,7 @@ async def scr_tp(s):
         [btn("🎁 Trial & free links", "ap:tr")],
         [btn("🪙 Plans & prices", "ap:pl"), btn("🧾 Card & payment", "ap:pc")],
         [btn("🔗 Partner bot", "ap:pt"), btn("📢 Proof channel", "ap:pf")],
+        [btn("🎁 Refer & Earn", "ap:rf")],
         [btn("⬅️ Back", "ap:home")],
     ]
     return "💎 <b>TRIAL & PREMIUM</b>\n\n<blockquote>Choose what you want to edit.</blockquote>", kb(rows)
@@ -211,6 +213,37 @@ async def scr_proof(s):
     return text, kb(rows)
 
 
+async def scr_refer(s):
+    async def board(rows):
+        if not rows:
+            return "—"
+        lines = []
+        for i, (u, n) in enumerate(rows):
+            lines.append(f"{MEDALS[i]} {html.escape(await db.display_name(u))} (<code>{u}</code>) · {n}")
+        return "\n".join(lines)
+    today, life = await db.ref_today_count(), await db.ref_lifetime_count()
+    week_top = await db.ref_top(week_key(), 5)
+    life_top = await db.ref_top(None, 5, qualified=False)
+    text = (
+        "🎁 <b>REFER & EARN</b>\n\n<blockquote>"
+        f"Status: <b>{'ON' if s.get('ref_enabled', True) else 'OFF'}</b>\n"
+        f"Reward: every <b>{s.get('ref_need', 5)}</b> referrals = <b>{s.get('ref_days', 1)}</b> day(s) Premium\n"
+        f"Weekly bonus: {prizes_text(s)}\n\n"
+        f"New users via share today: <b>{today}</b>\nLifetime: <b>{life}</b></blockquote>\n\n"
+        f"🏆 <b>This week (active friends)</b>\n{await board(week_top)}\n\n"
+        f"🏅 <b>Lifetime top 5</b>\n{await board(life_top)}\n\n"
+        "<i>Keep these numbers the same in both bots. A referral is active once the friend receives a file. Banned users are never listed.</i>"
+    )
+    rows = [
+        [btn(f"Refer: {onoff(s.get('ref_enabled', True))}", "ap:t:refer")],
+        stepper("Every", "ref_need", s.get('ref_need', 5)),
+        stepper("Days", "ref_days", s.get('ref_days', 1)),
+        [btn("🏅 Weekly bonus days", "ap:in:ref_weekly")],
+        [btn("⬅️ Back", "ap:tp")],
+    ]
+    return text, kb(rows)
+
+
 async def scr_partner(s):
     on = bool(s.get('sync_enabled'))
     pend = await db.sync_pending_count()
@@ -284,7 +317,7 @@ async def build_screen(screen, s):
         return await scr_shortner(s, arg)
     table = {'home': scr_home, 'v': scr_verify, 'tp': scr_tp, 'tr': scr_trial, 'pl': scr_plans,
              'pc': scr_card, 'r': scr_reminders, 'u': scr_users, 'bc': scr_broadcast,
-             'st': scr_stats, 'g': scr_general, 'pt': scr_partner, 'pf': scr_proof}
+             'st': scr_stats, 'g': scr_general, 'pt': scr_partner, 'pf': scr_proof, 'rf': scr_refer}
     return await table.get(name, scr_home)(s)
 
 
@@ -295,6 +328,7 @@ TOGGLES = {  # key -> (setting, default, screen)
     'prot': ('protect_content', False, 'g'),
     'share': ('share_button', True, 'g'),
     'proof': ('proof_enabled', True, 'pf'),
+    'refer': ('ref_enabled', True, 'rf'),
 }
 CYCLES = {  # key -> (setting, values, default, screen)
     'dur': ('verify_duration', [1, 4, 8, 16, 24, 48], 24, 'v'),
@@ -304,7 +338,7 @@ CYCLES = {  # key -> (setting, values, default, screen)
     'ad': ('auto_delete', [0, 5, 10, 30, 60, 120], 0, 'g'),
 }
 STEPPERS = {  # key -> (min, max)
-    'trial_days': (1, 30), 'trial_daily': (1, 50), 'free_daily_limit': (0, 50),
+    'trial_days': (1, 30), 'trial_daily': (1, 50), 'free_daily_limit': (0, 50), 'ref_need': (1, 100), 'ref_days': (1, 365),
 }
 
 PROMPTS = {
@@ -337,6 +371,7 @@ PROMPTS = {
     'sync_db': ("Send the <b>Mailbox DB name</b> (letters, numbers, _ or -). Both bots must use the same name. Default: <code>sync_mailbox</code>", 'pt'),
     'proof_chat': ("Send the <b>proof channel ID</b>, like <code>-100xxxxxxxxxx</code>. This bot must be an admin there.", 'pf'),
     'proof_cap': ("Send the new proof caption (HTML allowed).\nPlaceholders: <code>{name}</code> <code>{plan}</code> <code>{days}</code> <code>{bots}</code>\nSend <code>default</code> to go back to the built-in caption.", 'pf'),
+    'ref_weekly': ("Send the weekly bonus days for rank 1 to 5, separated by spaces.\nExample: <code>10 8 6 4 2</code>", 'rf'),
     'sync_partner': ("Send the <b>partner bot's @username</b>.", 'pt'),
 }
 LINK_FIELDS = {'qr_link': 'qr_link', 'info_link': 'info_link', 'preview_link': 'preview_link', 'proofs_link': 'proofs_link'}
@@ -420,11 +455,11 @@ async def panel_cb(client: Client, query: CallbackQuery):
     if act == 'n':
         _, key, delta = data.split(':')
         lo, hi = STEPPERS[key]
-        default = {'trial_days': 3, 'trial_daily': 5, 'free_daily_limit': 3}[key]
+        default = {'trial_days': 3, 'trial_daily': 5, 'free_daily_limit': 3, 'ref_need': 5, 'ref_days': 1}[key]
         val = max(lo, min(hi, int(s.get(key, default)) + int(delta)))
         await db.update_settings(key, val)
         await query.answer()
-        return await render(client, chat_id, msg_id, 'tr')
+        return await render(client, chat_id, msg_id, 'rf' if key.startswith('ref_') else 'tr')
 
     if act == 'rt':
         n = int(data.split(':')[1])
@@ -617,6 +652,16 @@ async def apply_input(message: Message, field: str):
     if field == 'proof_cap':
         await db.update_settings('proof_caption', '' if raw.lower() == 'default' else rich)
         return None, "✅ Caption saved."
+
+    if field == 'ref_weekly':
+        try:
+            days = [int(x) for x in raw.split()]
+            if not 1 <= len(days) <= 5 or any(d < 0 or d > 365 for d in days):
+                raise ValueError
+        except ValueError:
+            return "Send 1 to 5 numbers (0 to 365), like: 10 8 6 4 2", None
+        await db.update_settings('ref_weekly', days)
+        return None, "✅ Weekly bonus saved."
 
     if field == 'upi':
         await db.update_settings('upi_id', raw)

@@ -9,7 +9,7 @@ from utils.helpers import clean_url, ist_str
 from utils.i18n import tr
 from utils.prem import (plan_label, find_plan, contact_row, plans_view, pending_view, pay_keyboard, proof_ready)
 from utils.proof import post_proof
-from utils.ui import btn, kb, show
+from utils.ui import btn, kb, show, more_row
 from utils import sync as sy
 
 
@@ -153,7 +153,7 @@ async def screenshot_handler(client: Client, message: Message):
         message.stop_propagation()
 
     await db.set_pay_plan(user_id, None)
-    rows = contact_row(settings, lang)
+    rows = contact_row(settings, lang) + more_row(settings, lang)
     await message.reply_text(tr(lang, 'ss_got'), reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
     message.stop_propagation()
 
@@ -209,6 +209,7 @@ async def pay_ok_cb(client: Client, query: CallbackQuery):
     else:
         text = tr(lang, 'approved', plan=html.escape(plan_label(plan, lang)), date=ist_str(expire_at))
     rows.extend(contact_row(settings, lang))
+    rows.extend(more_row(settings, lang))
     try:
         await client.send_message(buyer, text, reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
     except Exception:
@@ -299,7 +300,7 @@ async def add_premium_cmd(client: Client, message: Message):
         await message.reply_text(f"✅ Premium added for <code>{user_id}</code> · till {ist_str(expire_at)}", parse_mode=ParseMode.HTML)
         lang = await user_lang(user_id)
         settings = await db.get_settings()
-        rows = contact_row(settings, lang)
+        rows = contact_row(settings, lang) + more_row(settings, lang)
         try:
             await client.send_message(user_id, tr(lang, 'approved', plan=f"{days} days", date=ist_str(expire_at)),
                                       reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)

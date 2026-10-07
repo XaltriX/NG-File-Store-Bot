@@ -3,7 +3,7 @@ import motor.motor_asyncio
 import string
 import secrets
 from config import Config
-from utils.helpers import ist_date, ist_midnight, trial_info
+from utils.helpers import ist_date, ist_midnight, trial_info, ist_date_of, week_key
 
 class Database:
     def __init__(self):
@@ -31,6 +31,8 @@ class Database:
         self.stats_col = self.db1.daily_stats
         self.pay_col = self.db1.payments
         self.sync_out = self.db1.sync_outbox
+        self.ref_events = self.db1.ref_events
+        self.ref_rewards = self.db1.ref_rewards
 
         self.files_col2 = None
         if Config.MONGO_URI_2:
@@ -346,6 +348,7 @@ class Database:
             'dual_shortner': False,
             'share_button': True,
             'proof_enabled': True, 'proof_chat': 0, 'proof_caption': '',
+            'ref_enabled': True, 'ref_need': 5, 'ref_days': 1, 'ref_weekly': [10, 8, 6, 4, 2],
             'shortener2_url': '', 'shortener2_api': '', 'tutorial2_link': '',
             'trial_enabled': True, 'trial_days': 3, 'trial_daily': 5,
             'reminder_enabled': True, 'reminder_hours': 12, 'quiet_hours': True,
@@ -775,6 +778,93 @@ class Database:
 
     async def sync_cleanup(self, before_ts: int):
         await self.sync_out.delete_many({'sent': True, 'sent_at': {'$lt': before_ts}})
+
+
+    # ================= Referrals =================
+    async def set_name(self, user_id: int, name: str):
+        await self.users_col.update_one({'_id': user_id}, {'$set': {'name': (name or '')[:30]}})
+
+    async def display_name(self, user_id: int) -> str:
+        u = await self.users_col.find_one({'_id': user_id}, {'name': 1}) or {}
+        return u.get('name') or f"User {str(user_id)[-4:]}"
+
+    async def record_referral(self, new_u: int, by: int, wk: str = None, ts: int = None):
+        """One event per new user (the first sharer wins). Returns (inserted, total referrals of `by`)."""
+        ts = int(ts or time.time())
+        res = await self.ref_events.update_one(
+            {'_id': new_u},
+            {'$setOnInsert': {'by': by, 'ts': ts, 'date': ist_date_of(ts), 'wk': wk or week_key(ts), 'q': False}},
+            upsert=True
+        )
+        if res.upserted_id is None:
+            return False, 0
+        return True, await self.ref_events.count_documents({'by': by})
+
+    async def ref_total(self, by: int) -> int:
+        return await self.ref_events.count_documents({'by': by})
+
+    async def qualify_referral(self, new_u: int) -> bool:
+        """Mark a referral as 'active' once the referred user received a file."""
+        res = await self.ref_events.update_one({'_id': new_u, 'q': {'$ne': True}}, {'$set': {'q': True}})
+        return res.modified_count > 0
+
+    async def mark_got_file(self, user_id: int) -> bool:
+        res = await self.users_col.update_one({'_id': user_id, 'got_file': {'$ne': True}}, {'$set': {'got_file': True}})
+        return res.modified_count > 0
+
+    async def _ref_groups(self, wk, qualified, limit):
+        match = {}
+        if wk:
+            match['wk'] = wk
+        if qualified:
+            match['q'] = True
+        pipe = [{'$match': match}, {'$group': {'_id': '$by', 'n': {'$sum': 1}, 'first': {'$min': '$ts'}}},
+                {'$sort': {'n': -1, 'first': 1, '_id': 1}}, {'$limit': limit}]
+        return await self.ref_events.aggregate(pipe).to_list(limit)
+
+    async def ref_top(self, wk=None, limit: int = 5, qualified: bool = True):
+        """Top referrers [(user_id, count)]. Banned users never appear."""
+        out = []
+        for r in await self._ref_groups(wk, qualified, limit + 25):
+            if r['_id'] is None or await self.is_banned(r['_id']):
+                continue
+            out.append((r['_id'], r['n']))
+            if len(out) == limit:
+                break
+        return out
+
+    async def ref_week_rank(self, by: int, wk: str):
+        rows = [r for r in await self._ref_groups(wk, True, 1000) if r['_id'] is not None]
+        for i, r in enumerate(rows, 1):
+            if r['_id'] == by:
+                return i
+        return None
+
+    async def ref_today_count(self) -> int:
+        return await self.ref_events.count_documents({'date': ist_date()})
+
+    async def ref_lifetime_count(self) -> int:
+        return await self.ref_events.count_documents({})
+
+    async def claim_reward(self, rid: str, uid: int, days: int, kind: str) -> bool:
+        res = await self.ref_rewards.update_one(
+            {'_id': rid}, {'$setOnInsert': {'uid': uid, 'days': days, 'kind': kind, 'ts': int(time.time())}}, upsert=True)
+        return res.upserted_id is not None
+
+    async def ref_days_earned(self, uid: int) -> int:
+        rows = await self.ref_rewards.aggregate([{'$match': {'uid': uid}}, {'$group': {'_id': None, 'd': {'$sum': '$days'}}}]).to_list(1)
+        return int(rows[0]['d']) if rows else 0
+
+    async def sync_queue_event(self, ref: str, fields: dict):
+        """Queue any small event (referral, qualification) for the partner bot."""
+        s = await self.get_settings()
+        if not (s.get('sync_enabled') and s.get('sync_url')):
+            return False
+        doc = dict(fields)
+        doc.setdefault('ts', int(time.time()))
+        doc['sent'] = False
+        await self.sync_out.update_one({'_id': ref}, {'$setOnInsert': doc}, upsert=True)
+        return True
 
 
 db = Database()

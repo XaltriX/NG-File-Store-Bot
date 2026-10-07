@@ -40,3 +40,12 @@ Old commands still work as hidden shortcuts. Env vars: see .env.example.
 - Admin Panel -> Trial & Premium -> Proof channel: channel ID, ON/OFF, caption editor, test post.
 - Only the bot where you approve posts. Premium granted by sync in the partner bot never posts.
 - "Buy Premium" in the channel opens the plans screen via /start premium.
+
+## Round 7 - Refer & Earn, share tracking, More Videos, single-file share fix
+- Share button now travels WITH single files too (it was added afterwards by editing, which silently failed for copied messages).
+- Share links carry the sharer's id (post_rf<id>); Refer & Earn screen has the personal link (start=ref_<id>). A new user counts for one sharer only.
+- Every 5 referrals = 1 day Premium, instantly, in BOTH bots (referral events travel through the partner mailbox; keep Sync ON in both bots).
+- Weekly top 5 (Monday 00:10 IST, previous week): +10/8/6/4/2 days. Only ACTIVE referrals (friend received a file) count; banned users are excluded.
+- Admin Panel -> Trial & Premium -> Refer & Earn: ON/OFF, referrals per reward, days per reward, weekly bonus days, top 5 (week + lifetime). /stats shows "Joined via share today / lifetime".
+- "More Videos" (Preview link) is the last full-width button on: welcome, verify screen, reminders, "last trial link" note, premium activated / under review / expiry notices, referral rewards.
+- Your own config.py, runtime.txt and your text edits in utils/i18n.py are kept exactly as they were.

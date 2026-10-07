@@ -60,3 +60,18 @@ def trial_info(user: dict, settings: dict) -> dict:
     used = user.get('trial_used', 0) if user.get('trial_date') == ist_date() else 0
     return {'phase': 'active', 'day': day, 'days': days, 'daily': daily,
             'used': used, 'left': max(daily - used, 0)}
+
+
+def ist_date_of(ts) -> str:
+    return datetime.fromtimestamp(ts, IST).strftime('%Y-%m-%d')
+
+
+def week_start_ts(ts=None) -> int:
+    """Epoch of Monday 00:00 IST of the week that contains ts (default: now)."""
+    dt = datetime.fromtimestamp(ts, IST) if ts else ist_now()
+    start = (dt - timedelta(days=dt.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(start.timestamp())
+
+
+def week_key(ts=None) -> str:
+    return ist_date_of(week_start_ts(ts))

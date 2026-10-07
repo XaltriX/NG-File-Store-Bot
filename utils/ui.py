@@ -60,6 +60,12 @@ async def edit_by_id(client, chat_id, msg_id, text, markup=None):
                                       link_preview_options=NO_PREVIEW)
 
 
+def more_row(settings, lang):
+    """Full-width 'More Videos' button (the Preview link). [] when no link is set."""
+    url = clean_url((settings or {}).get('preview_link', ''))
+    return [[btn(tr(lang, 'b_more'), url=url)]] if url else []
+
+
 async def welcome_view(user_id, mention, user, settings, is_admin):
     lang = (user or {}).get('lang') or 'en'
     text = tr(lang, 'welcome', name=mention)
@@ -78,6 +84,8 @@ async def welcome_view(user_id, mention, user, settings, is_admin):
                 text += tr(lang, 'w_credits', creds=(user or {}).get('credits', 0))
 
     rows = [[btn(tr(lang, 'b_status'), 'u:status'), btn(tr(lang, 'b_premium'), 'prem_open')]]
+    if settings.get('ref_enabled', True):
+        rows.append([btn(tr(lang, 'b_refer'), 'u:refer')])
     row2 = []
     if clean_url(Config.UPDATES_LINK):
         row2.append(btn(tr(lang, 'b_updates'), url=clean_url(Config.UPDATES_LINK)))
@@ -87,6 +95,7 @@ async def welcome_view(user_id, mention, user, settings, is_admin):
         rows.append(row2)
     if is_admin:
         rows.append([btn(tr('en', 'b_admin'), 'ap:home')])
+    rows.extend(more_row(settings, lang))
     return text, kb(rows)
 
 

@@ -38,6 +38,7 @@ async def build_stats_text():
         f"✅ Verified now: <b>{v_now:,}</b> · ever (unique): <b>{v_ever:,}</b>"
         "</blockquote>\n"
         "<blockquote>"
+        f"🔗 Joined via share today: <b>{await db.ref_today_count()}</b> · lifetime: <b>{await db.ref_lifetime_count()}</b>\n"
         f"🎁 Trials started today: <b>{today_s.get('trials_started', 0)}</b>\n"
         f"⏰ Reminders sent today: <b>{today_s.get('reminders_sent', 0)}</b>\n"
         f"👆 Reminder clicks today: <b>{today_s.get('reminder_clicks', 0)}</b>\n"

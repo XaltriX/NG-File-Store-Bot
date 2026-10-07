@@ -44,6 +44,8 @@ async def setup_indexes():
         await db.tokens_col.create_index("createdAt", expireAfterSeconds=86400)
         await db.vlog_col.create_index("date")
         await db.users_col.create_index("trial_start", sparse=True)
+        await db.ref_events.create_index([("by", 1), ("wk", 1)])
+        await db.ref_events.create_index("date")
         await db.premium_col.create_index("expire_at")
         await db.pay_col.create_index([("u", 1), ("status", 1)])
         await db.users_col.create_index("ever_premium", sparse=True)

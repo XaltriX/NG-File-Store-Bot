@@ -6,7 +6,7 @@ from pyrogram.errors import FloodWait
 from utils.database import db
 from utils.helpers import ist_now, ist_str
 from utils.i18n import tr, REMINDER_EN, REMINDER_HI
-from utils.ui import btn, kb
+from utils.ui import btn, kb, more_row
 
 BLOCKED = {'UserIsBlocked', 'InputUserDeactivated', 'UserDeactivated', 'UserDeactivatedBan', 'PeerIdInvalid'}
 CHECK_EVERY = 600  # seconds
@@ -48,7 +48,7 @@ async def run_reminders(client, settings):
                 markup = kb([[
                     btn(tr(lang, 'b_verify'), url=f"https://t.me/{bot_username}?start=getverify"),
                     btn(tr(lang, 'b_premium'), "prem_open"),
-                ]])
+                ]] + more_row(settings, lang))
                 m = await client.send_message(uid, text, reply_markup=markup, parse_mode=ParseMode.HTML)
                 await db.mark_reminded(uid, m.id)
                 await db.bump_stat('reminders_sent')
@@ -66,6 +66,7 @@ async def run_reminders(client, settings):
 
 async def run_expiry_notices(client):
     now = int(time.time())
+    settings = await db.get_settings()
     for doc in await db.premium_expiring():
         left = doc['expire_at'] - now
         if left <= 86400 and not doc.get('n1'):
@@ -80,7 +81,7 @@ async def run_expiry_notices(client):
         try:
             await client.send_message(
                 uid, tr(lang, 'exp_soon', days=days, date=ist_str(doc['expire_at'])),
-                reply_markup=kb([[btn(tr(lang, 'b_renew'), "prem_open")]]), parse_mode=ParseMode.HTML
+                reply_markup=kb([[btn(tr(lang, 'b_renew'), "prem_open")]] + more_row(settings, lang)), parse_mode=ParseMode.HTML
             )
         except FloodWait as e:
             await asyncio.sleep(e.value + 1)

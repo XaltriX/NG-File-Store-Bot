@@ -14,7 +14,8 @@ from utils.shortener import get_shortlink
 from utils.shortlink_guard import ShortlinkGuard
 from script import Script
 from utils.i18n import tr
-from utils.ui import welcome_view, status_view, show
+from utils.ui import welcome_view, status_view, show, more_row
+from utils.referral import parse_start, share_link, share_url, handle_new_referral, refer_view, on_first_file
 from utils.prem import plans_view
 
 FILE_CACHE = {}
@@ -108,8 +109,8 @@ async def build_share_markup(client: Client, chat_id: int, payload: str, setting
         return None
     user = await db.get_user(chat_id) or {}
     lang = user.get('lang') or 'en'
-    link = f"https://t.me/{username}?start={payload}"
-    url = "https://t.me/share/url?url=" + quote(link, safe='') + "&text=" + quote(tr(lang, 'share_text'), safe='')
+    link = share_link(username, payload, chat_id)
+    url = share_url(link, tr(lang, 'share_text'))
     return InlineKeyboardMarkup([[InlineKeyboardButton(tr(lang, 'b_share'), url=url)]])
 
 
@@ -239,7 +240,7 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                 # 🚀 PURE PERMANENT SINGLE MODE
                 try:
                     final_cap = format_caption(file_data.get('cap', ''))
-                    sent_m = await client.send_cached_media(chat_id, file_data['f'], caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected)
+                    sent_m = await client.send_cached_media(chat_id, file_data['f'], caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
                 except Exception:
                     # 🚀 SMART HYBRID AUTO-HEALING FALLBACK (SINGLE)
                     try:
@@ -248,7 +249,7 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                             db_msg = await client.get_messages(real_c_id, file_data['m'])
                             if db_msg and not getattr(db_msg, "empty", True):
                                 if db_msg.media: 
-                                    sent_m = await client.copy_message(chat_id, real_c_id, file_data['m'], caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected)
+                                    sent_m = await client.copy_message(chat_id, real_c_id, file_data['m'], caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
                                     media = db_msg.document or db_msg.video or db_msg.audio or db_msg.photo or db_msg.animation or db_msg.sticker or db_msg.voice
                                     if media:
                                         new_f_id = media.file_id if not isinstance(media, list) else media[-1].file_id
@@ -256,7 +257,7 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                                         try: await db.update_file_data(unique_id, {'f': new_f_id})
                                         except Exception: pass
                                 else: 
-                                    sent_m = await client.copy_message(chat_id, real_c_id, file_data['m'], protect_content=is_protected)
+                                    sent_m = await client.copy_message(chat_id, real_c_id, file_data['m'], protect_content=is_protected, reply_markup=share_mk)
                         else:
                             sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
                     except Exception:
@@ -264,7 +265,7 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
             elif 'c' not in file_data and 'cap' in file_data:
                 try:
                     final_cap = format_caption(file_data.get('cap', ''))
-                    sent_m = await client.send_message(chat_id, final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected)
+                    sent_m = await client.send_message(chat_id, final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
                 except Exception:
                     sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
             else:
@@ -277,32 +278,33 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                     if db_msg and not getattr(db_msg, "empty", True):
                         final_cap = format_caption(db_msg.caption.html if db_msg.caption else (db_msg.text.html if db_msg.text else ""))
                         if db_msg.media:
-                            sent_m = await client.copy_message(chat_id, db_chat_id, msg_id, caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected)
+                            sent_m = await client.copy_message(chat_id, db_chat_id, msg_id, caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
                         else:
-                            sent_m = await client.copy_message(chat_id, db_chat_id, msg_id, protect_content=is_protected)
+                            sent_m = await client.copy_message(chat_id, db_chat_id, msg_id, protect_content=is_protected, reply_markup=share_mk)
                     else: raise Exception("Empty")
                 except (ChannelInvalid, ChannelPrivate, ChatAdminRequired, Exception):
                     if 'f' in file_data:
                         orig_cap = file_data.get('cap', '')
                         final_cap = format_caption(orig_cap)
                         try:
-                            sent_m = await client.send_cached_media(chat_id, file_data['f'], caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected)
+                            sent_m = await client.send_cached_media(chat_id, file_data['f'], caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
                         except Exception:
                             sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
                     elif 'cap' in file_data:
-                        try: sent_m = await client.send_message(chat_id, format_caption(file_data.get('cap', '')), parse_mode=ParseMode.HTML, protect_content=is_protected)
+                        try: sent_m = await client.send_message(chat_id, format_caption(file_data.get('cap', '')), parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
                         except Exception: sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
                     else:
                         sent_m = await client.send_message(chat_id, Script.MSG_NOT_FOUND_SERVER)
             
             if sent_m and hasattr(sent_m, "id"): 
                 sent_msg_ids.append(sent_m.id)
-                if share_mk and getattr(sent_m, "media", None):
-                    try: await client.edit_message_reply_markup(chat_id, sent_m.id, share_mk)
-                    except Exception: pass
                 if auto_delete_time > 0:
                     warn_msg = await client.send_message(chat_id, Script.SINGLE_SUCCESS_WARN.format(auto_delete_time=auto_delete_time))
                     sent_msg_ids.append(warn_msg.id)
+
+        if sent_msg_ids:
+            try: await on_first_file(client, chat_id)
+            except Exception as e: print(f"Referral qualify error: {type(e).__name__}")
 
         if auto_delete_time > 0 and sent_msg_ids:
             asyncio.create_task(delete_after_delay(client, chat_id, sent_msg_ids, auto_delete_time * 60))
@@ -356,6 +358,7 @@ async def send_verify_screen(client: Client, chat_id: int, user_id: int, payload
     if tut:
         row2.append(InlineKeyboardButton(tr(lang, 'b_tutorial'), url=tut))
     rows.append(row2)
+    rows.extend(more_row(settings, lang))
     markup = InlineKeyboardMarkup(rows)
 
     try: await wait_msg.delete()
@@ -410,10 +413,11 @@ async def send_note(client: Client, chat_id: int, note: dict, lang: str):
     markup = None
     if note.get('last'):
         bot_username = bot_username_of(client) or (await client.get_me()).username
-        markup = InlineKeyboardMarkup([[
+        rows = [[
             InlineKeyboardButton(tr(lang, 'b_verify'), url=f"https://t.me/{bot_username}?start=getverify"),
             InlineKeyboardButton(tr(lang, 'b_premium'), callback_data="prem_open"),
-        ]])
+        ]] + more_row(await db.get_settings(), lang)
+        markup = InlineKeyboardMarkup(rows)
     try:
         await client.send_message(chat_id, note['text'], reply_markup=markup, parse_mode=ParseMode.HTML)
     except Exception:
@@ -497,6 +501,15 @@ async def start_command(client: Client, message: Message):
     lang = user.get('lang') or 'en'
     await db.reset_ignored(user_id)
 
+    raw_parts = (message.text or '').split()
+    clean_payload, ref_by = parse_start(raw_parts[1] if len(raw_parts) > 1 else None)
+    try:
+        await db.set_name(user_id, message.from_user.first_name)
+        if is_new_user and ref_by:
+            await handle_new_referral(client, user_id, ref_by, settings)
+    except Exception as e:
+        print(f"Referral error: {type(e).__name__}: {e}")
+
     log_channel = settings.get('log_channel')
     if is_new_user and log_channel:
         try:
@@ -511,8 +524,7 @@ async def start_command(client: Client, message: Message):
         await message.reply_text(Script.PRIVATE_MODE_MSG)
         return
 
-    text = message.text
-    payload = text.split()[1] if len(text.split()) > 1 else None
+    payload = clean_payload or None
 
     if not is_admin:
         missing_fsubs = await check_fsub(client, user_id)
@@ -632,6 +644,17 @@ async def check_fsub_callback(client: Client, query: CallbackQuery):
     await send_note(client, chat_id, note, lang)
 
 
+@Client.on_message(filters.command("refer") & filters.private)
+async def refer_command(client: Client, message: Message):
+    user_id = message.from_user.id
+    if await db.is_banned(user_id):
+        return
+    user = await db.get_user(user_id) or {}
+    text, markup = await refer_view(client, user_id, user.get('lang') or 'en', await db.get_settings())
+    await message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.HTML,
+                             link_preview_options=LinkPreviewOptions(is_disabled=True))
+
+
 @Client.on_callback_query(filters.regex(r"^(u:|close_menu$|close_data$)"))
 async def user_menu_callbacks(client: Client, query: CallbackQuery):
     action = query.data
@@ -653,6 +676,10 @@ async def user_menu_callbacks(client: Client, query: CallbackQuery):
 
     elif action == "u:status":
         text, markup = await status_view(user_id, user, settings, is_admin)
+        await show(client, query, text, markup)
+
+    elif action == "u:refer":
+        text, markup = await refer_view(client, user_id, lang, settings)
         await show(client, query, text, markup)
 
     elif action == "u:lang":

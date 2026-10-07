@@ -14,7 +14,8 @@ from utils.database import db
 from utils.helpers import ist_str
 from utils.i18n import tr
 from utils.prem import contact_row
-from utils.ui import kb
+from utils.ui import kb, more_row
+from utils import referral
 
 KEEP_DAYS = 7
 LOOP_SECONDS = 15
@@ -50,11 +51,9 @@ async def push_pending(client, box):
     my_id = client.me.id
     n = 0
     for o in await db.sync_unsent(50):
-        await box.update_one(
-            {'_id': o['_id']},
-            {'$setOnInsert': {'src': my_id, 'u': o['u'], 'days': o['days'], 'ts': o['ts'], 'done_by': []}},
-            upsert=True
-        )
+        fields = {k: v for k, v in o.items() if k not in ('_id', 'sent', 'sent_at')}
+        fields.update({'src': my_id, 'done_by': []})
+        await box.update_one({'_id': o['_id']}, {'$setOnInsert': fields}, upsert=True)
         await db.sync_mark_sent(o['_id'])
         n += 1
     return n
@@ -66,23 +65,31 @@ async def pull_incoming(client, box, settings):
     applied = 0
     query = {'src': {'$ne': my_id}, 'done_by': {'$ne': my_id}, 'ping': {'$ne': True},
              'ts': {'$gt': now - KEEP_DAYS * 86400}}
-    for d in await box.find(query).limit(50).to_list(50):
+    for d in await box.find(query).sort([('ts', 1), ('_id', 1)]).limit(50).to_list(50):
         claimed = await box.find_one_and_update(
             {'_id': d['_id'], 'done_by': {'$ne': my_id}}, {'$addToSet': {'done_by': my_id}})
         if not claimed:
             continue
+        kind = d.get('kind')
         try:
-            exp = await db.extend_premium(d['u'], int(d['days']))
-            await db.bump_stat('prem_synced')
+            if kind == 'ref':                       # a referral that happened in the partner bot
+                await referral.apply_remote_event(client, d, settings)
+            elif kind == 'refq':                    # that referred user received a file there
+                await db.qualify_referral(d['u'])
+            else:
+                exp = await db.extend_premium(d['u'], int(d['days']))
+                await db.bump_stat('prem_synced')
         except Exception:
             await box.update_one({'_id': d['_id']}, {'$pull': {'done_by': my_id}})  # retry next round
             raise
         applied += 1
+        if kind in ('ref', 'refq'):
+            continue
         print(f"🔁 Sync: granted {d['days']} day(s) premium to {d['u']} (from partner bot)")
         user = await db.get_user(d['u']) or {}
         lang = user.get('lang') or 'en'
         plan = f"{d['days']} दिन" if lang == 'hi' else f"{d['days']} days"
-        rows = contact_row(settings, lang)
+        rows = contact_row(settings, lang) + more_row(settings, lang)
         try:
             await client.send_message(d['u'], tr(lang, 'approved', plan=plan, date=ist_str(exp)),
                                       reply_markup=kb(rows) if rows else None, parse_mode=ParseMode.HTML)
