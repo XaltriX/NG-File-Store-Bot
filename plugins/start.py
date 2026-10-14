@@ -13,10 +13,10 @@ from utils.fsub_helper import check_fsub, get_fsub_keyboard
 from utils.shortener import get_shortlink
 from utils.shortlink_guard import ShortlinkGuard
 from script import Script
-from utils.i18n import tr
+from utils.i18n import tr, LANGS, detect_lang
 from utils.ui import welcome_view, status_view, show, more_row
 from utils.referral import parse_start, share_link, share_url, handle_new_referral, refer_view, on_first_file
-from utils.prem import plans_view
+from utils.prem import plans_for, offer_text
 
 FILE_CACHE = {}
 MAX_CACHE_SIZE = 50
@@ -84,7 +84,7 @@ def format_caption(original_caption: str) -> str:
         return f"{original_caption}{Script.BRANDING_TAG}"
     return Script.BRANDING_TAG.strip()
 
-async def delete_after_delay(client, chat_id, message_ids, delay):
+async def delete_after_delay(client, chat_id, message_ids, delay, lang='en'):
     await asyncio.sleep(delay)
     warn_msg_id = message_ids[-1]
     file_msg_ids = message_ids[:-1]
@@ -96,7 +96,7 @@ async def delete_after_delay(client, chat_id, message_ids, delay):
         pass
         
     try:
-        await client.edit_message_text(chat_id, warn_msg_id, Script.AUTO_DELETE_DONE)
+        await client.edit_message_text(chat_id, warn_msg_id, tr(lang, 's_auto_deleted'))
     except Exception:
         pass
 
@@ -116,14 +116,15 @@ async def build_share_markup(client: Client, chat_id: int, payload: str, setting
 
 async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=None):
     unique_id = payload
+    lang = await user_lang(chat_id)
         
     try:
         file_data = await get_cached_file(unique_id)
         if not file_data:
             if reply_to_msg:
-                await reply_to_msg.reply_text(Script.INVALID_LINK)
+                await reply_to_msg.reply_text(tr(lang, 's_invalid_link'))
             else:
-                await client.send_message(chat_id, Script.INVALID_LINK)
+                await client.send_message(chat_id, tr(lang, 's_invalid_link'))
             return
 
         sent_msg_ids = []
@@ -136,7 +137,7 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
             if 'files' in file_data:
                 # 🚀 PURE PERMANENT BATCH MODE (No Channel Needed)
                 total_files = len(file_data['files'])
-                wait_text = Script.BATCH_SENDING.format(total_files=total_files)
+                wait_text = tr(lang, 's_batch_sending', total_files=total_files)
                 wait_msg = await reply_to_msg.reply_text(wait_text) if reply_to_msg else await client.send_message(chat_id, wait_text)
                 
                 success_sent = 0
@@ -182,21 +183,21 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                 except Exception: pass
                 
                 if success_sent == 0:
-                    if reply_to_msg: await reply_to_msg.reply_text(Script.MSG_NOT_FOUND_SERVER)
-                    else: await client.send_message(chat_id, Script.MSG_NOT_FOUND_SERVER)
+                    if reply_to_msg: await reply_to_msg.reply_text(tr(lang, 's_msg_nf'))
+                    else: await client.send_message(chat_id, tr(lang, 's_msg_nf'))
                     return
                 
                 if auto_delete_time > 0:
-                    success_msg = await client.send_message(chat_id, Script.BATCH_SUCCESS_WARN.format(auto_delete_time=auto_delete_time), reply_markup=share_mk)
+                    success_msg = await client.send_message(chat_id, tr(lang, 's_batch_ok_warn', auto_delete_time=auto_delete_time), reply_markup=share_mk)
                     sent_msg_ids.append(success_msg.id)
-                else: await client.send_message(chat_id, Script.BATCH_SUCCESS, reply_markup=share_mk)
+                else: await client.send_message(chat_id, tr(lang, 's_batch_ok'), reply_markup=share_mk)
                 
             else:
                 # NORMAL BATCH MODE (Legacy)
                 db_chat_id = get_correct_chat_id(file_data['c']) 
                 first_id, last_id = file_data['f_id'], file_data['l_id']
                 total_files = (last_id - first_id) + 1
-                wait_text = Script.BATCH_SENDING.format(total_files=total_files)
+                wait_text = tr(lang, 's_batch_sending', total_files=total_files)
                 wait_msg = await reply_to_msg.reply_text(wait_text) if reply_to_msg else await client.send_message(chat_id, wait_text)
                 
                 success_sent = 0
@@ -226,14 +227,14 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                 except Exception: pass
                 
                 if success_sent == 0:
-                    if reply_to_msg: await reply_to_msg.reply_text(Script.MSG_NOT_FOUND_SERVER)
-                    else: await client.send_message(chat_id, Script.MSG_NOT_FOUND_SERVER)
+                    if reply_to_msg: await reply_to_msg.reply_text(tr(lang, 's_msg_nf'))
+                    else: await client.send_message(chat_id, tr(lang, 's_msg_nf'))
                     return
                 
                 if auto_delete_time > 0:
-                    success_msg = await client.send_message(chat_id, Script.BATCH_SUCCESS_WARN.format(auto_delete_time=auto_delete_time), reply_markup=share_mk)
+                    success_msg = await client.send_message(chat_id, tr(lang, 's_batch_ok_warn', auto_delete_time=auto_delete_time), reply_markup=share_mk)
                     sent_msg_ids.append(success_msg.id)
-                else: await client.send_message(chat_id, Script.BATCH_SUCCESS, reply_markup=share_mk)
+                else: await client.send_message(chat_id, tr(lang, 's_batch_ok'), reply_markup=share_mk)
                 
         else:
             if 'f' in file_data:
@@ -259,15 +260,15 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                                 else: 
                                     sent_m = await client.copy_message(chat_id, real_c_id, file_data['m'], protect_content=is_protected, reply_markup=share_mk)
                         else:
-                            sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
+                            sent_m = await client.send_message(chat_id, tr(lang, 's_file_nf'))
                     except Exception:
-                        sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
+                        sent_m = await client.send_message(chat_id, tr(lang, 's_file_nf'))
             elif 'c' not in file_data and 'cap' in file_data:
                 try:
                     final_cap = format_caption(file_data.get('cap', ''))
                     sent_m = await client.send_message(chat_id, final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
                 except Exception:
-                    sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
+                    sent_m = await client.send_message(chat_id, tr(lang, 's_file_nf'))
             else:
                 # NORMAL SINGLE MODE
                 db_chat_id = get_correct_chat_id(file_data['c']) 
@@ -289,17 +290,17 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
                         try:
                             sent_m = await client.send_cached_media(chat_id, file_data['f'], caption=final_cap, parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
                         except Exception:
-                            sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
+                            sent_m = await client.send_message(chat_id, tr(lang, 's_file_nf'))
                     elif 'cap' in file_data:
                         try: sent_m = await client.send_message(chat_id, format_caption(file_data.get('cap', '')), parse_mode=ParseMode.HTML, protect_content=is_protected, reply_markup=share_mk)
-                        except Exception: sent_m = await client.send_message(chat_id, Script.FILE_NOT_FOUND_SERVER)
+                        except Exception: sent_m = await client.send_message(chat_id, tr(lang, 's_file_nf'))
                     else:
-                        sent_m = await client.send_message(chat_id, Script.MSG_NOT_FOUND_SERVER)
+                        sent_m = await client.send_message(chat_id, tr(lang, 's_msg_nf'))
             
             if sent_m and hasattr(sent_m, "id"): 
                 sent_msg_ids.append(sent_m.id)
                 if auto_delete_time > 0:
-                    warn_msg = await client.send_message(chat_id, Script.SINGLE_SUCCESS_WARN.format(auto_delete_time=auto_delete_time))
+                    warn_msg = await client.send_message(chat_id, tr(lang, 's_single_warn', auto_delete_time=auto_delete_time))
                     sent_msg_ids.append(warn_msg.id)
 
         if sent_msg_ids:
@@ -307,12 +308,16 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
             except Exception as e: print(f"Referral qualify error: {type(e).__name__}")
 
         if auto_delete_time > 0 and sent_msg_ids:
-            asyncio.create_task(delete_after_delay(client, chat_id, sent_msg_ids, auto_delete_time * 60))
+            asyncio.create_task(delete_after_delay(client, chat_id, sent_msg_ids, auto_delete_time * 60, lang))
             
     except Exception as e:
-        await client.send_message(chat_id, Script.DELIVERY_ERROR)
+        await client.send_message(chat_id, tr(lang, 's_delivery_err'))
     finally:
         pass
+
+
+async def user_lang(user_id):
+    return ((await db.get_user(user_id)) or {}).get('lang') or 'en'
 
 
 def bot_username_of(client):
@@ -348,7 +353,7 @@ async def send_verify_screen(client: Client, chat_id: int, user_id: int, payload
         head_txt = tr(lang, 'locked_trial_today')
     else:
         head_txt = tr(lang, 'locked_normal')
-    text = tr(lang, 'locked_body', head=head_txt, benefit=benefit)
+    text = tr(lang, 'locked_body', head=head_txt, benefit=benefit, offer=offer_text(settings, lang))
 
     rows = []
     if short_url:
@@ -462,16 +467,27 @@ async def send_welcome(client: Client, chat_id: int, user_id: int, mention: str,
 
 async def send_premium_screen(client: Client, chat_id: int, user_id: int, settings: dict):
     user = await db.get_user(user_id) or {}
-    text, markup = plans_view(settings, user.get('lang') or 'en', bot_username_of(client))
+    text, markup = await plans_for(settings, user.get('lang') or 'en', bot_username_of(client))
     await client.send_message(chat_id, text, reply_markup=markup, parse_mode=ParseMode.HTML,
                               link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 
-def language_keyboard():
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("English", callback_data="u:setlang:en"),
-        InlineKeyboardButton("हिंदी", callback_data="u:setlang:hi"),
-    ]])
+def language_keyboard(suggest=None):
+    """12 languages, 3 per row, native names. A detected language is offered first with a tick."""
+    rows, row = [], []
+    if suggest:
+        name = dict(LANGS)[suggest]
+        rows.append([InlineKeyboardButton(f"✅ {name}", callback_data=f"u:setlang:{suggest}")])
+    for code, name in LANGS:
+        if code == suggest:
+            continue
+        row.append(InlineKeyboardButton(name, callback_data=f"u:setlang:{code}"))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(rows)
 
 
 @Client.on_message(filters.command("start") & filters.private)
@@ -488,11 +504,12 @@ async def start_command(client: Client, message: Message):
     DELIVERY_CACHE[user_id] = current_time + DELIVERY_CACHE_TTL
 
     if await db.is_banned(user_id):
+        lang = await user_lang(user_id)
         support_btn = []
         if Config.SUPPORT_LINK:
-            support_btn.append([InlineKeyboardButton(Script.BTN_CONTACT_SUPPORT, url=clean_url(Config.SUPPORT_LINK))])
+            support_btn.append([InlineKeyboardButton(tr(lang, 'b_contact'), url=clean_url(Config.SUPPORT_LINK))])
         reply_markup = InlineKeyboardMarkup(support_btn) if support_btn else None
-        return await message.reply_text(Script.BANNED_MSG, reply_markup=reply_markup)
+        return await message.reply_text(tr(lang, 's_banned'), reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
     is_new_user = await db.add_user(user_id)
     settings = await db.get_settings()
@@ -521,7 +538,7 @@ async def start_command(client: Client, message: Message):
             pass
 
     if settings.get('mode') == 'private' and not is_admin:
-        await message.reply_text(Script.PRIVATE_MODE_MSG)
+        await message.reply_text(tr(lang, 's_private'))
         return
 
     payload = clean_payload or None
@@ -529,14 +546,14 @@ async def start_command(client: Client, message: Message):
     if not is_admin:
         missing_fsubs = await check_fsub(client, user_id)
         if missing_fsubs:
-            keyboard = await get_fsub_keyboard(client, missing_fsubs, payload)
-            await message.reply_text(Script.FSUB_WARNING, reply_markup=keyboard)
+            keyboard = await get_fsub_keyboard(client, missing_fsubs, payload, lang)
+            await message.reply_text(tr(lang, 's_fsub_warn'), reply_markup=keyboard, parse_mode=ParseMode.HTML)
             return
 
     if payload:
         if payload.startswith("vpass_"):
             if not (Config.GUARD_URL and Config.GUARD_SECRET):
-                return await message.reply_text(Script.VERIFY_INVALID)
+                return await message.reply_text(tr(lang, 's_verify_invalid'))
             parts = payload.split("_")
             if len(parts) >= 3:
                 token, signature = parts[1], parts[2]
@@ -545,11 +562,11 @@ async def start_command(client: Client, message: Message):
                     if token_data and token_data['user_id'] == user_id:
                         await complete_verification(client, message, user_id, token_data, settings, lang)
                     else:
-                        return await message.reply_text(Script.VERIFY_INVALID)
+                        return await message.reply_text(tr(lang, 's_verify_invalid'))
                 else:
-                    return await message.reply_text(Script.GUARD_BANNED)
+                    return await message.reply_text(tr(lang, 's_guard_banned'))
             else:
-                return await message.reply_text(Script.VERIFY_INVALID)
+                return await message.reply_text(tr(lang, 's_verify_invalid'))
             return
 
         elif payload.startswith("verify_"):
@@ -559,10 +576,10 @@ async def start_command(client: Client, message: Message):
                 bypass_time = settings.get('bypass_time', 15)
                 time_taken = int(time.time()) - token_data.get('createdAt', 0)
                 if bypass_time > 0 and time_taken < bypass_time:
-                    return await message.reply_text(Script.BYPASS_DETECTED)
+                    return await message.reply_text(tr(lang, 's_bypass'))
                 await complete_verification(client, message, user_id, token_data, settings, lang)
             else:
-                await message.reply_text(Script.VERIFY_INVALID)
+                await message.reply_text(tr(lang, 's_verify_invalid'))
             return
 
         elif payload == "premium":
@@ -593,7 +610,7 @@ async def start_command(client: Client, message: Message):
         return
 
     if not user.get('lang'):
-        return await message.reply_text(tr('en', 'lang_pick'), reply_markup=language_keyboard(), parse_mode=ParseMode.HTML)
+        return await message.reply_text(tr('en', 'lang_pick'), reply_markup=language_keyboard(detect_lang(message.from_user.language_code)), parse_mode=ParseMode.HTML)
 
     await send_welcome(client, message.chat.id, user_id, message.from_user.mention, settings, is_admin)
 
@@ -602,22 +619,23 @@ async def start_command(client: Client, message: Message):
 async def check_fsub_callback(client: Client, query: CallbackQuery):
     user_id = query.from_user.id
 
+    lang = await user_lang(user_id)
     if await db.is_banned(user_id):
         support_btn = []
         if Config.SUPPORT_LINK:
-            support_btn.append([InlineKeyboardButton(Script.BTN_CONTACT_SUPPORT, url=clean_url(Config.SUPPORT_LINK))])
+            support_btn.append([InlineKeyboardButton(tr(lang, 'b_contact'), url=clean_url(Config.SUPPORT_LINK))])
         reply_markup = InlineKeyboardMarkup(support_btn) if support_btn else None
-        await query.message.reply_text(Script.BANNED_CB_MSG, reply_markup=reply_markup)
-        return await query.answer(Script.BANNED_CB_ALERT, show_alert=True)
+        await query.message.reply_text(tr(lang, 's_banned_cb'), reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        return await query.answer(tr(lang, 's_banned_alert'), show_alert=True)
 
     payload = query.data.split("_", 1)[1]
     missing_fsubs = await check_fsub(client, user_id)
 
     if missing_fsubs:
-        await query.answer(Script.FSUB_NOT_JOINED_ALERT, show_alert=True)
+        await query.answer(tr(lang, 's_fsub_no'), show_alert=True)
         return
 
-    await query.answer(Script.FSUB_JOINED_ALERT, show_alert=True)
+    await query.answer(tr(lang, 's_fsub_ok'), show_alert=True)
     chat_id = query.message.chat.id
     try:
         await query.message.delete()
@@ -627,7 +645,7 @@ async def check_fsub_callback(client: Client, query: CallbackQuery):
     settings = await db.get_settings()
     is_admin = await db.is_admin(user_id)
     if settings.get('mode') == 'private' and not is_admin:
-        return await client.send_message(chat_id, Script.PRIVATE_MODE_MSG)
+        return await client.send_message(chat_id, tr(lang, 's_private'))
 
     if payload == "premium":
         return await send_premium_screen(client, chat_id, user_id, settings)
@@ -683,14 +701,15 @@ async def user_menu_callbacks(client: Client, query: CallbackQuery):
         await show(client, query, text, markup)
 
     elif action == "u:lang":
-        await show(client, query, tr('en', 'lang_pick'), language_keyboard())
+        await show(client, query, tr('en', 'lang_pick'), language_keyboard(detect_lang(query.from_user.language_code)))
 
     elif action.startswith("u:setlang:"):
         new_lang = action.split(":")[2]
-        if new_lang in ("en", "hi"):
+        if new_lang in dict(LANGS):
             await db.set_lang(user_id, new_lang)
             user['lang'] = new_lang
         text, markup = await welcome_view(user_id, query.from_user.mention, user, settings, is_admin)
+        lang = user.get('lang') or 'en'
         start_pic = getattr(Config, "START_PIC", None)
         if query.message.photo or not start_pic:
             await show(client, query, text, markup)

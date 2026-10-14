@@ -6,7 +6,7 @@ from pyrogram.enums import ChatMemberStatus
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import Config
 from utils.database import db
-from script import Script
+from utils.i18n import tr
 
 # 🚀 1. Asynchronous Semaphore (invisible traffic cop)
 fsub_semaphore = asyncio.Semaphore(5)
@@ -67,7 +67,7 @@ async def check_fsub(client, user_id):
     MICRO_CACHE[user_id] = {'expires': current_time + MICRO_CACHE_TTL, 'missing': missing_channels}            
     return missing_channels
 
-async def get_fsub_keyboard(client, missing_channels, payload):
+async def get_fsub_keyboard(client, missing_channels, payload, lang='en'):
     buttons = []
     settings = await db.get_settings()
     is_req_fsub = settings.get('req_fsub', False)
@@ -90,13 +90,13 @@ async def get_fsub_keyboard(client, missing_channels, payload):
                 invite_url = invite_link.invite_link
                 INVITE_LINK_CACHE[cache_key] = {'link': invite_url, 'expires': current_time + 500} # Cache for ~8 minutes
                 
-            buttons.append([InlineKeyboardButton(Script.BTN_JOIN_CHANNEL.format(idx=idx), url=invite_url)])
+            buttons.append([InlineKeyboardButton(tr(lang, 'b_join_ch', idx=idx), url=invite_url)])
             
         except Exception as e:
             print(f"Error creating invite link for {chat_id}: {e}")
             continue
     
     if payload:
-        buttons.append([InlineKeyboardButton(Script.BTN_CHECK_JOINED, callback_data=f"chkF_{payload}", style="primary")])
+        buttons.append([InlineKeyboardButton(tr(lang, 'b_check_joined'), callback_data=f"chkF_{payload}", style="primary")])
         
     return InlineKeyboardMarkup(buttons)

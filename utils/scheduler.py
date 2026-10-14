@@ -5,7 +5,7 @@ from pyrogram.enums import ParseMode
 from pyrogram.errors import FloodWait
 from utils.database import db
 from utils.helpers import ist_now, ist_str
-from utils.i18n import tr, REMINDER_EN, REMINDER_HI
+from utils.i18n import tr
 from utils.ui import btn, kb, more_row
 
 BLOCKED = {'UserIsBlocked', 'InputUserDeactivated', 'UserDeactivated', 'UserDeactivatedBan', 'PeerIdInvalid'}
@@ -38,8 +38,8 @@ async def run_reminders(client, settings):
                     await db.mark_checked(uid)
                     continue
                 lang = u.get('lang') or 'en'
-                text = settings.get('reminder_text_hi' if lang == 'hi' else 'reminder_text') \
-                    or (REMINDER_HI if lang == 'hi' else REMINDER_EN)
+                custom = settings.get('reminder_text_hi' if lang == 'hi' else 'reminder_text') if lang in ('en', 'hi') else None
+                text = custom or tr(lang, 'reminder')
                 if u.get('rem_msg'):
                     try:
                         await client.delete_messages(uid, u['rem_msg'])
@@ -92,6 +92,34 @@ async def run_expiry_notices(client):
         await asyncio.sleep(0.05)
 
 
+async def run_winback(client):
+    """1 and 3 days after Premium ends: one friendly message each, with Renew + More Videos."""
+    now = int(time.time())
+    settings = await db.get_settings()
+    for doc in await db.winback_due():
+        ago = now - doc['expire_at']
+        if ago >= 3 * 86400 and not doc.get('w3'):
+            flags, days = ['w1', 'w3'], 3
+        elif ago >= 86400 and not doc.get('w1') and ago < 3 * 86400:
+            flags, days = ['w1'], 1
+        else:
+            continue
+        uid = doc['_id']
+        lang = ((await db.get_user(uid)) or {}).get('lang') or 'en'
+        try:
+            await client.send_message(
+                uid, tr(lang, 'winback', days=days),
+                reply_markup=kb([[btn(tr(lang, 'b_renew'), "prem_open")]] + more_row(settings, lang)), parse_mode=ParseMode.HTML)
+        except FloodWait as e:
+            await asyncio.sleep(e.value + 1)
+            continue
+        except Exception:
+            pass
+        await db.mark_prem_notified(uid, flags)
+        await asyncio.sleep(0.05)
+    await db.winback_cleanup()
+
+
 async def reminder_loop(client):
     await asyncio.sleep(30)
     while True:
@@ -99,6 +127,7 @@ async def reminder_loop(client):
             settings = await db.get_settings()
             if not in_quiet_hours(settings):
                 await run_expiry_notices(client)
+                await run_winback(client)
                 if settings.get('reminder_enabled', True) and settings.get('shortlink_status'):
                     await run_reminders(client, settings)
         except Exception as e:

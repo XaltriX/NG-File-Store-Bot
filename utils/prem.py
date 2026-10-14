@@ -4,7 +4,8 @@ import time
 from config import Config
 from utils.database import db
 from utils.helpers import clean_url, ist_str
-from utils.i18n import tr, PREMIUM_CARD_EN, PREMIUM_CARD_HI, PREMIUM_SOLO_EN, PREMIUM_SOLO_HI
+import re
+from utils.i18n import tr, plan_auto
 from utils.ui import btn, kb
 
 PER_PAGE = 8
@@ -12,9 +13,53 @@ PER_PAGE = 8
 
 # ---------------- basics ----------------
 def plan_name(plan, lang):
+    """English/Hindi keep your custom names; other languages are built from the days."""
+    if lang == 'en':
+        return plan['name']
     if lang == 'hi' and plan.get('name_hi'):
         return plan['name_hi']
-    return plan['name']
+    try:
+        return plan_auto(lang, plan['days'])
+    except Exception:
+        return plan['name']
+
+
+def per_day(plan):
+    d = max(int(plan.get('days') or 1), 1)
+    return plan['price'] / d
+
+
+def fmt_pd(v):
+    t = f"{v:.1f}"
+    return t[:-2] if t.endswith('.0') else t
+
+
+def best_plan(settings):
+    """Plan with the lowest price per day (only when there are 2+ plans and it is not the only one)."""
+    plans = [p for p in settings.get('premium_plans', []) if p.get('days')]
+    if len(plans) < 2:
+        return None
+    b = min(plans, key=per_day)
+    return b if per_day(b) < max(per_day(p) for p in plans) else None
+
+
+def min_price(settings):
+    plans = settings.get('premium_plans', [])
+    return min((p['price'] for p in plans), default=None)
+
+
+def offer_text(settings, lang):
+    mp = min_price(settings)
+    return tr(lang, 'offer', price=mp) if mp is not None else ''
+
+
+async def social_count(settings=None):
+    """Approved payments in the last 7 days; shown only when above 5 (real numbers only)."""
+    try:
+        n = await db.premium_week_count()
+    except Exception:
+        return 0
+    return n if n > 5 else 0
 
 
 def plan_label(plan, lang='en'):
@@ -70,31 +115,36 @@ def pay_keyboard(settings, pid, selected_id, post_on):
 
 
 # ---------------- user-facing plans screen ----------------
-def render_card(settings, lang, me=None):
-    custom = settings.get('card_custom_hi' if lang == 'hi' else 'card_custom_en')
+def render_card(settings, lang, me=None, social=0):
+    custom = settings.get('card_custom_hi' if lang == 'hi' else 'card_custom_en') if lang in ('en', 'hi') else None
     duo = bool(sync_active(settings) and me)
-    if custom:
-        tpl = custom
-    elif duo:
-        tpl = PREMIUM_CARD_HI if lang == 'hi' else PREMIUM_CARD_EN
-    else:
-        tpl = PREMIUM_SOLO_HI if lang == 'hi' else PREMIUM_SOLO_EN
+    tpl = custom or tr(lang, 'card_duo' if duo else 'card_solo')
+    bp = best_plan(settings)
+    best = (tr(lang, 'best_line', plan=html.escape(plan_name(bp, lang)), pd=fmt_pd(per_day(bp))) + "\n") if bp else ""
+    proof = (tr(lang, 'social', n=social) + "\n") if social else ""
     partner = (settings.get('partner_username') or '').lstrip('@')
     bots = f"✅ @{me}\n✅ @{partner}" if duo else ""
     plans = "\n".join(f"🪙 ₹{p['price']} — {html.escape(plan_name(p, lang))}" for p in settings.get('premium_plans', []))
-    return (tpl.replace('{bots}', bots)
-               .replace('{plans}', plans)
-               .replace('{upi}', html.escape(settings.get('upi_id', '')))
-               .replace('{owner}', html.escape(settings.get('owner_handle', ''))))
+    out = (tpl.replace('{bots}', bots)
+              .replace('{best}', best).replace('{proof}', proof)
+              .replace('{plans}', plans)
+              .replace('{upi}', html.escape(settings.get('upi_id', '')))
+              .replace('{owner}', html.escape(settings.get('owner_handle', ''))))
+    return re.sub(r'\n{3,}', '\n\n', out)
 
 
-def plans_view(settings, lang, me=None):
+async def plans_for(settings, lang, me=None):
+    return plans_view(settings, lang, me, await social_count(settings))
+
+
+def plans_view(settings, lang, me=None, social=0):
     plans = settings.get('premium_plans', [])
+    bp = best_plan(settings)
     if not plans:
         return tr(lang, 'prem_gone'), kb([[btn(tr(lang, 'b_back'), 'u:home')]])
     rows, row = [], []
     for p in plans:
-        row.append(btn('🪙 ' + plan_label(p, lang), f"prem_plan:{p['id']}"))
+        row.append(btn(('⭐ ' if bp and p['id'] == bp['id'] else '🪙 ') + plan_label(p, lang), f"prem_plan:{p['id']}"))
         if len(row) == 2:
             rows.append(row)
             row = []
@@ -110,7 +160,7 @@ def plans_view(settings, lang, me=None):
         rows.append(links)
     rows.append([btn(tr(lang, 'b_back'), 'u:home')])
     rows.extend(contact_row(settings, lang))          # always the last, full-width row
-    return render_card(settings, lang, me), kb(rows)
+    return render_card(settings, lang, me, social), kb(rows)
 
 
 # ---------------- admin: pending payments ----------------

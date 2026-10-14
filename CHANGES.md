@@ -49,3 +49,9 @@ Old commands still work as hidden shortcuts. Env vars: see .env.example.
 - Admin Panel -> Trial & Premium -> Refer & Earn: ON/OFF, referrals per reward, days per reward, weekly bonus days, top 5 (week + lifetime). /stats shows "Joined via share today / lifetime".
 - "More Videos" (Preview link) is the last full-width button on: welcome, verify screen, reminders, "last trial link" note, premium activated / under review / expiry notices, referral rewards.
 - Your own config.py, runtime.txt and your text edits in utils/i18n.py are kept exactly as they were.
+
+## Multi-language + premium upgrades
+- 12 languages (English, Hindi, Bengali, Marathi, Telugu, Tamil, Gujarati, Urdu, Kannada, Malayalam, Punjabi, Odia): picker with auto-detect tick, change anytime from Status. Files: `utils/i18n.py` (+ `utils/langs/*.py`). All user messages incl. ban/force-sub/batch/error texts are translated. English uses your `script.py` text.
+- Plan names auto-built from days per language (English/Hindi keep your custom names). Custom card/reminder text applies to English & Hindi only.
+- Premium: ⭐ best-value plan + per-day price, offer line on verify/limit screens, social proof (shown only when >5 approvals in last 7 days), win-back messages 1 & 3 days after expiry.
+- Stats: language mix + Trial→Verify→Premium funnel in /stats; Admin → Stats → 🌐 Languages (per-language conversion).

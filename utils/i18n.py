@@ -3,7 +3,7 @@
 PREMIUM_CARD_EN = (
     "💎 <b>Choose Your Plan</b>\n\n"
     "<blockquote>🎁 <b>One payment. Two bots.</b>\n{bots}\n"
-    "<i>Pay in either bot. Premium turns on in both.</i></blockquote>\n\n"
+    "<i>Pay in either bot. Premium turns on in both.</i></blockquote>\n\n{best}{proof}\n"
     "<b>How it works</b>\n1️⃣ Pick a plan → 2️⃣ Pay by UPI → 3️⃣ Send screenshot → 4️⃣ Done\n\n"
     "🚫 No ads · ✅ No verification · ⚡ Direct videos\n\n"
     "👇 <i>Pick a plan to continue</i>"
@@ -12,21 +12,21 @@ PREMIUM_CARD_EN = (
 PREMIUM_CARD_HI = (
     "💎 <b>अपना प्लान चुनें</b>\n\n"
     "<blockquote>🎁 <b>एक पेमेंट। दो बॉट।</b>\n{bots}\n"
-    "<i>किसी भी बॉट में पेमेंट करें। प्रीमियम दोनों में चालू होगा।</i></blockquote>\n\n"
+    "<i>किसी भी बॉट में पेमेंट करें। प्रीमियम दोनों में चालू होगा।</i></blockquote>\n\n{best}{proof}\n"
     "<b>कैसे होगा</b>\n1️⃣ प्लान चुनें → 2️⃣ UPI से पेमेंट → 3️⃣ स्क्रीनशॉट भेजें → 4️⃣ हो गया\n\n"
     "🚫 कोई विज्ञापन नहीं · ✅ कोई वेरिफिकेशन नहीं · ⚡ सीधा वीडियो\n\n"
     "👇 <i>आगे बढ़ने के लिए प्लान चुनें</i>"
 )
 
 PREMIUM_SOLO_EN = (
-    "💎 <b>Choose Your Plan</b>\n\n"
+    "💎 <b>Choose Your Plan</b>\n\n{best}{proof}\n"
     "<b>How it works</b>\n1️⃣ Pick a plan → 2️⃣ Pay by UPI → 3️⃣ Send screenshot → 4️⃣ Done\n\n"
     "🚫 No ads · ✅ No verification · ⚡ Direct videos\n\n"
     "👇 <i>Pick a plan to continue</i>"
 )
 
 PREMIUM_SOLO_HI = (
-    "💎 <b>अपना प्लान चुनें</b>\n\n"
+    "💎 <b>अपना प्लान चुनें</b>\n\n{best}{proof}\n"
     "<b>कैसे होगा</b>\n1️⃣ प्लान चुनें → 2️⃣ UPI से पेमेंट → 3️⃣ स्क्रीनशॉट भेजें → 4️⃣ हो गया\n\n"
     "🚫 कोई विज्ञापन नहीं · ✅ कोई वेरिफिकेशन नहीं · ⚡ सीधा वीडियो\n\n"
     "👇 <i>आगे बढ़ने के लिए प्लान चुनें</i>"
@@ -176,9 +176,106 @@ STR = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Languages (picker order). Native names are shown on the picker buttons.
+# ---------------------------------------------------------------------------
+LANGS = [
+    ('en', 'English'), ('hi', 'हिन्दी'), ('bn', 'বাংলা'), ('mr', 'मराठी'),
+    ('te', 'తెలుగు'), ('ta', 'தமிழ்'), ('gu', 'ગુજરાતી'), ('ur', 'اردو'),
+    ('kn', 'ಕನ್ನಡ'), ('ml', 'മലയാളം'), ('pa', 'ਪੰਜਾਬੀ'), ('or', 'ଓଡ଼ିଆ'),
+]
+LANG_CODES = [c for c, _ in LANGS]
+LANG_NAMES = dict(LANGS)
+LANG_NAMES_EN = {'en': 'English', 'hi': 'Hindi', 'bn': 'Bengali', 'mr': 'Marathi', 'te': 'Telugu', 'ta': 'Tamil',
+                 'gu': 'Gujarati', 'ur': 'Urdu', 'kn': 'Kannada', 'ml': 'Malayalam', 'pa': 'Punjabi', 'or': 'Odia'}
+
+
+def detect_lang(code):
+    """Telegram language_code -> supported code, or None (English / unknown = no suggestion)."""
+    c = (code or '').lower().replace('_', '-').split('-')[0]
+    return c if c in LANG_NAMES and c != 'en' else None
+
+
+# ---------------------------------------------------------------------------
+# New keys: script.py messages, reminder, cards, win-back, offers (English + Hindi)
+# English re-uses your script.py text, so your edits there still apply.
+# ---------------------------------------------------------------------------
+from script import Script as _S
+
+STR['en'].update({
+    's_auto_deleted': _S.AUTO_DELETE_DONE, 's_invalid_link': _S.INVALID_LINK,
+    's_batch_sending': _S.BATCH_SENDING, 's_batch_ok': _S.BATCH_SUCCESS, 's_batch_ok_warn': _S.BATCH_SUCCESS_WARN,
+    's_file_nf': _S.FILE_NOT_FOUND_SERVER, 's_msg_nf': _S.MSG_NOT_FOUND_SERVER,
+    's_single_warn': _S.SINGLE_SUCCESS_WARN, 's_delivery_err': _S.DELIVERY_ERROR,
+    's_bypass': _S.BYPASS_DETECTED, 's_verify_invalid': _S.VERIFY_INVALID, 's_guard_banned': _S.GUARD_BANNED,
+    's_banned': _S.BANNED_MSG, 's_banned_cb': _S.BANNED_CB_MSG, 's_banned_alert': _S.BANNED_CB_ALERT,
+    's_private': _S.PRIVATE_MODE_MSG, 's_fsub_warn': _S.FSUB_WARNING,
+    's_fsub_no': _S.FSUB_NOT_JOINED_ALERT, 's_fsub_ok': _S.FSUB_JOINED_ALERT,
+    'b_join_ch': _S.BTN_JOIN_CHANNEL, 'b_check_joined': _S.BTN_CHECK_JOINED,
+    'reminder': REMINDER_EN, 'card_duo': PREMIUM_CARD_EN, 'card_solo': PREMIUM_SOLO_EN,
+    'locked_body': '{head}\n\n<blockquote>🔓 <b>Free Verify</b> — {benefit}\n💎 <b>Premium</b> — instant, ad-free access{offer}</blockquote>\n\n👇 <i>Tap a button below</i>',
+    'offer': "\n💰 From just <b>₹{price}</b> · no waiting, no ads",
+    'best_line': "⭐ <b>Best value:</b> {plan} · only ≈ ₹{pd}/day",
+    'social': "🔥 <b>{n}</b> new members joined this week",
+    'winback': "💔 <b>We miss you!</b>\n\n<blockquote>Your Premium ended <b>{days}</b> day(s) ago.\nRenew now to get instant, ad-free access again.</blockquote>",
+    'u_d': "{n} Day|{n} Days", 'u_m': "{n} Month|{n} Months", 'u_y': "{n} Year|{n} Years",
+})
+
+STR['hi'].update({
+    's_auto_deleted': "<blockquote>🗑 <b>आपकी फ़ाइलें अपने-आप डिलीट कर दी गई हैं!</b></blockquote>",
+    's_invalid_link': "<blockquote>❌ <b>यह लिंक अमान्य है या एक्सपायर हो चुका है!</b></blockquote>",
+    's_batch_sending': "<blockquote>⏳ <b>{total_files} फ़ाइलें भेजी जा रही हैं... कृपया प्रतीक्षा करें!</b></blockquote>",
+    's_batch_ok': "<blockquote>✅ <b>आपकी सभी फ़ाइलें सफलतापूर्वक भेज दी गई हैं!</b></blockquote>",
+    's_batch_ok_warn': "<blockquote>✅ <b>आपकी सभी फ़ाइलें सफलतापूर्वक भेज दी गई हैं!</b>\n\n⚠️ <b>चेतावनी:</b> स्पैम रोकने के लिए ये फ़ाइलें <b>{auto_delete_time} मिनट</b> में डिलीट हो जाएंगी। कृपया अभी फ़ॉरवर्ड कर लें।</blockquote>",
+    's_file_nf': "<blockquote>❌ <b>फ़ाइल सर्वर पर नहीं मिली!</b></blockquote>",
+    's_msg_nf': "<blockquote>❌ <b>मैसेज सर्वर पर नहीं मिला!</b></blockquote>",
+    's_single_warn': "<blockquote>⚠️ <b>चेतावनी:</b> स्पैम रोकने के लिए यह फ़ाइल <b>{auto_delete_time} मिनट</b> में अपने-आप डिलीट हो जाएगी। कृपया अभी फ़ॉरवर्ड कर लें।</blockquote>",
+    's_delivery_err': "<blockquote>❌ <b>डिलीवरी के दौरान एक त्रुटि हुई!</b></blockquote>",
+    's_bypass': "<blockquote>🚫 <b>बायपास पकड़ा गया!</b>\n\nआपने बायपास टूल इस्तेमाल किया या गलत लिंक डाला है।\n\n<b>कृपया लिंक फिर से खोलें और ईमानदारी से वेरिफाई करें।</b></blockquote>",
+    's_verify_invalid': "<blockquote>❌ <b>वेरिफिकेशन टोकन अमान्य या एक्सपायर है!</b>\nकृपया असली लिंक खोलकर दोबारा वेरिफाई करें।</blockquote>",
+    's_guard_banned': "<blockquote>🚫 <b>बायपास टूल पकड़ा गया!</b>\nअमान्य सिग्नेचर! आपने लिंक को मैन्युअली बायपास करने की कोशिश की।</blockquote>",
+    's_banned': "<blockquote>❌ <b>माफ़ कीजिए! आपको इस बॉट से हमेशा के लिए बैन कर दिया गया है।</b>\n\nमदद के लिए सपोर्ट से संपर्क करें।</blockquote>",
+    's_banned_cb': "<blockquote>❌ <b>माफ़ कीजिए! आपको इस बॉट से बैन कर दिया गया है।</b></blockquote>",
+    's_banned_alert': "❌ आप इस बॉट से बैन हैं!",
+    's_private': "<blockquote>🔒 <b>माफ़ कीजिए! बॉट अभी प्राइवेट मोड में है।</b>\nएडमिन के पब्लिक करने पर आप फ़ाइलें पा सकेंगे।</blockquote>",
+    's_fsub_warn': "<blockquote>⚠️ <b>फ़ाइल पाने के लिए नीचे दिए चैनल जॉइन करना ज़रूरी है!</b>\n\n<i>(ये जॉइन लिंक 10 मिनट में अपने-आप हट जाएंगे)</i></blockquote>",
+    's_fsub_no': "⚠️ आपने अभी सभी चैनल जॉइन नहीं किए हैं! कृपया जॉइन करें।",
+    's_fsub_ok': "✅ चैनल वेरिफिकेशन सफल!",
+    'b_join_ch': "🟢 चैनल जॉइन करें {idx}", 'b_check_joined': "🔄 जॉइन चेक करें",
+    'reminder': REMINDER_HI, 'card_duo': PREMIUM_CARD_HI, 'card_solo': PREMIUM_SOLO_HI,
+    'locked_body': '{head}\n\n<blockquote>🔓 <b>फ्री वेरिफाई</b> — {benefit}\n💎 <b>प्रीमियम</b> — तुरंत और बिना विज्ञापन एक्सेस{offer}</blockquote>\n\n👇 <i>नीचे दिया बटन दबाएं</i>',
+    'offer': "\n💰 सिर्फ़ <b>₹{price}</b> से · न इंतज़ार, न विज्ञापन",
+    'best_line': "⭐ <b>सबसे बढ़िया वैल्यू:</b> {plan} · सिर्फ़ ≈ ₹{pd}/दिन",
+    'social': "🔥 इस हफ्ते <b>{n}</b> नए मेंबर जुड़े",
+    'winback': "💔 <b>हमें आपकी याद आई!</b>\n\n<blockquote>आपका प्रीमियम <b>{days}</b> दिन पहले खत्म हुआ।\nअभी रिन्यू करें और फिर से तुरंत, बिना विज्ञापन एक्सेस पाएं।</blockquote>",
+    'u_d': "{n} दिन|{n} दिन", 'u_m': "{n} महीना|{n} महीने", 'u_y': "{n} साल|{n} साल",
+})
+
+# Other languages live in utils/langs/<code>.py (each exposes a STR dict with the same keys).
+import importlib as _il
+for _c in LANG_CODES[2:]:
+    try:
+        STR[_c] = _il.import_module(f'utils.langs.{_c}').STR
+    except ImportError:
+        pass
+
+
 def tr(lang: str, key: str, **kw) -> str:
     table = STR.get(lang) or STR['en']
     text = table.get(key)
     if text is None:
         text = STR['en'].get(key, key)
     return text.format(**kw) if kw else text
+
+
+def plan_auto(lang: str, days: int) -> str:
+    """'1 Month' / '3 Months' / '1 Year' in the user's language, built from days."""
+    days = int(days)
+    if days >= 365 and days % 365 == 0:
+        key, n = 'u_y', days // 365
+    elif days >= 30 and days % 30 == 0:
+        key, n = 'u_m', days // 30
+    else:
+        key, n = 'u_d', days
+    one, _, many = tr(lang, key).partition('|')
+    return (one if n == 1 else (many or one)).format(n=n)

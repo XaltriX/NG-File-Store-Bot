@@ -2,8 +2,24 @@ import time
 from datetime import timedelta
 from config import Config
 from utils.database import db
+from utils.i18n import LANG_NAMES_EN
 
 BOT_START = time.time()
+
+
+def pct(a, b):
+    return f"{(a * 100 / b):.0f}%" if b else "0%"
+
+
+async def lang_line(top=4):
+    rows = await db.lang_stats()
+    total = sum(r[1] for r in rows) or 1
+    return " · ".join(f"{LANG_NAMES_EN.get(l, l)} {pct(n, total)}" for l, n, _, _ in rows[:top]) or "—"
+
+
+async def funnel_line(lang=None):
+    u, t, v, p = await db.funnel(lang)
+    return f"Trial {pct(t, u)} → Verify {pct(v, t)} → Premium {pct(p, v)}"
 
 
 async def build_stats_text():
@@ -44,6 +60,10 @@ async def build_stats_text():
         f"👆 Reminder clicks today: <b>{today_s.get('reminder_clicks', 0)}</b>\n"
         f"✅ Verified via reminder: <b>{today_s.get('reminder_verifies', 0)}</b>\n"
         f"💎 Premium approved today: <b>{today_s.get('prem_approved', 0)}</b>"
+        "</blockquote>\n"
+        "<blockquote>"
+        f"🌐 {await lang_line()}\n"
+        f"🎯 {await funnel_line()}"
         "</blockquote>\n"
         "<blockquote>"
         f"👥 Users: <b>{total_users}</b>   🚫 Banned: <b>{total_banned}</b>\n"

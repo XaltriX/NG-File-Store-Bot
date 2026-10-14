@@ -11,6 +11,8 @@ from utils.database import db
 from utils.helpers import clean_url, mask, ist_str, trial_info, week_key
 from utils.referral import MEDALS, prizes_text
 from utils.stats_ui import build_stats_text
+from utils.i18n import LANG_NAMES_EN
+from utils.stats_ui import pct, funnel_line
 from utils.prem import premium_list_view, pending_view, fmt_age
 from utils.proof import post_proof
 from utils import sync as syncmod
@@ -287,7 +289,22 @@ async def scr_partner(s):
 
 
 async def scr_stats(s):
-    return await build_stats_text(), kb([[btn("🔄 Refresh", "ap:st"), btn("⬅️ Back", "ap:home")]])
+    return await build_stats_text(), kb([[btn("🌐 Languages", "ap:lg")],
+                                         [btn("🔄 Refresh", "ap:st"), btn("⬅️ Back", "ap:home")]])
+
+
+async def scr_langs(s):
+    rows = await db.lang_stats()
+    total = sum(r[1] for r in rows) or 1
+    lines = []
+    for l, n, v, p in rows:
+        lines.append(f"<b>{LANG_NAMES_EN.get(l, l)}</b> · {n} ({pct(n, total)}) · 💎 {p} ({pct(p, n)})\n"
+                     f"     🎯 {await funnel_line(l)}")
+    body = "\n".join(lines) or "No users yet."
+    text = ("🌐 <b>LANGUAGES</b>\n\n<blockquote>Users · share · 💎 premium (conversion)\n"
+            "Funnel: Trial → Verify → Premium</blockquote>\n\n" + body +
+            f"\n\n🎯 <b>All:</b> {await funnel_line()}")
+    return text, kb([[btn("🔄 Refresh", "ap:lg"), btn("⬅️ Back", "ap:st")]])
 
 
 async def scr_general(s):
@@ -317,7 +334,7 @@ async def build_screen(screen, s):
         return await scr_shortner(s, arg)
     table = {'home': scr_home, 'v': scr_verify, 'tp': scr_tp, 'tr': scr_trial, 'pl': scr_plans,
              'pc': scr_card, 'r': scr_reminders, 'u': scr_users, 'bc': scr_broadcast,
-             'st': scr_stats, 'g': scr_general, 'pt': scr_partner, 'pf': scr_proof, 'rf': scr_refer}
+             'st': scr_stats, 'lg': scr_langs, 'g': scr_general, 'pt': scr_partner, 'pf': scr_proof, 'rf': scr_refer}
     return await table.get(name, scr_home)(s)
 
 

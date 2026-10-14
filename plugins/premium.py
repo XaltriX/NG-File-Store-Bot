@@ -7,7 +7,7 @@ from config import Config
 from utils.database import db
 from utils.helpers import clean_url, ist_str
 from utils.i18n import tr
-from utils.prem import (plan_label, find_plan, contact_row, plans_view, pending_view, pay_keyboard, proof_ready)
+from utils.prem import (plan_label, find_plan, contact_row, plans_for, pending_view, pay_keyboard, proof_ready)
 from utils.proof import post_proof
 from utils.ui import btn, kb, show, more_row
 from utils import sync as sy
@@ -24,7 +24,7 @@ async def user_lang(user_id):
 async def prem_open_cb(client: Client, query: CallbackQuery):
     settings = await db.get_settings()
     lang = await user_lang(query.from_user.id)
-    text, markup = plans_view(settings, lang, getattr(client.me, 'username', None))
+    text, markup = await plans_for(settings, lang, getattr(client.me, 'username', None))
     await show(client, query, text, markup, fresh=(query.data == "prem_back"))
     await query.answer()
 
@@ -33,7 +33,7 @@ async def prem_open_cb(client: Client, query: CallbackQuery):
 async def plan_command(client: Client, message: Message):
     settings = await db.get_settings()
     lang = await user_lang(message.from_user.id)
-    text, markup = plans_view(settings, lang, getattr(client.me, 'username', None))
+    text, markup = await plans_for(settings, lang, getattr(client.me, 'username', None))
     await message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
 
 
@@ -97,7 +97,7 @@ async def prem_cancel_cb(client: Client, query: CallbackQuery):
     await db.set_pay_plan(query.from_user.id, None)
     settings = await db.get_settings()
     lang = await user_lang(query.from_user.id)
-    text, markup = plans_view(settings, lang, getattr(client.me, 'username', None))
+    text, markup = await plans_for(settings, lang, getattr(client.me, 'username', None))
     await show(client, query, text, markup, fresh=True)
     await query.answer()
 

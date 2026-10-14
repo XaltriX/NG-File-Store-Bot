@@ -90,7 +90,7 @@ class Database:
         expire_at = int(time.time()) + time_seconds
         await self.premium_col.update_one(
             {'_id': user_id}, 
-            {'$set': {'expire_at': expire_at, 'daily_limit': daily_limit, 'used_today': 0, 'last_date': '', 'n3': False, 'n1': False}}, 
+            {'$set': {'expire_at': expire_at, 'daily_limit': daily_limit, 'used_today': 0, 'last_date': '', 'n3': False, 'n1': False, 'w1': False, 'w3': False}}, 
             upsert=True
         )
         await self.mark_ever(user_id, 'ever_premium')
@@ -102,8 +102,6 @@ class Database:
         doc = await self.premium_col.find_one({'_id': user_id})
         if doc and doc.get('expire_at', 0) > int(time.time()):
             return True
-        if doc and doc.get('expire_at', 0) <= int(time.time()):
-            await self.remove_premium(user_id) 
         return False
 
     async def check_and_use_premium(self, user_id: int):
@@ -113,7 +111,6 @@ class Database:
         
         current_time = int(time.time())
         if doc.get('expire_at', 0) <= current_time:
-            await self.remove_premium(user_id)
             return False
             
         daily_limit = doc.get('daily_limit', 0)
@@ -616,7 +613,7 @@ class Database:
         expire_at = base + days * 86400
         await self.premium_col.update_one(
             {'_id': user_id},
-            {'$set': {'expire_at': expire_at, 'daily_limit': 0, 'used_today': 0, 'last_date': '', 'n3': False, 'n1': False}},
+            {'$set': {'expire_at': expire_at, 'daily_limit': 0, 'used_today': 0, 'last_date': '', 'n3': False, 'n1': False, 'w1': False, 'w3': False}},
             upsert=True
         )
         await self.mark_ever(user_id, 'ever_premium')
@@ -657,6 +654,16 @@ class Database:
         now = int(time.time())
         cur = self.premium_col.find({'expire_at': {'$gt': now, '$lte': now + 3 * 86400}})
         return await cur.to_list(length=500)
+
+    async def winback_due(self, limit: int = 200):
+        """Expired premium docs still waiting for a 1-day or 3-day win-back message."""
+        now = int(time.time())
+        cur = self.premium_col.find({'expire_at': {'$lte': now - 86400, '$gt': now - 8 * 86400},
+                                     '$or': [{'w1': {'$ne': True}}, {'w3': {'$ne': True}}]})
+        return await cur.to_list(length=limit)
+
+    async def winback_cleanup(self):
+        await self.premium_col.delete_many({'expire_at': {'$lte': int(time.time()) - 8 * 86400}})
 
     async def mark_prem_notified(self, user_id: int, flags: list):
         await self.premium_col.update_one({'_id': user_id}, {'$set': {f: True for f in flags}})
@@ -729,6 +736,32 @@ class Database:
         else:
             cur = await self.verified_col.count_documents({'expire_at': {'$gt': int(time.time())}})
         return cur, max(ever, cur)
+
+    # ================= Language / funnel stats =================
+    async def lang_stats(self):
+        """[(lang, users, ever_verified, ever_premium)] sorted by users desc. Users with no lang count as 'en'."""
+        out = {}
+        async for d in self.users_col.find({}, {'lang': 1, 'ever_verified': 1, 'ever_premium': 1}):
+            r = out.setdefault(d.get('lang') or 'en', [0, 0, 0])
+            r[0] += 1
+            r[1] += 1 if d.get('ever_verified') else 0
+            r[2] += 1 if d.get('ever_premium') else 0
+        return sorted(((k, *v) for k, v in out.items()), key=lambda x: -x[1])
+
+    async def funnel(self, lang: str = None):
+        """(users, trial_started, verified, premium) optionally for one language."""
+        base = {}
+        if lang:
+            base = {'lang': lang} if lang != 'en' else {'$or': [{'lang': 'en'}, {'lang': {'$exists': False}}]}
+        def q(extra):
+            return {'$and': [base, extra]} if base else extra
+        c = self.users_col.count_documents
+        return (await c(q({})), await c(q({'trial_start': {'$exists': True}})),
+                await c(q({'ever_verified': True})), await c(q({'ever_premium': True})))
+
+    async def premium_week_count(self):
+        """Approved payments in the last 7 days (real social proof)."""
+        return await self.pay_col.count_documents({'status': 'approved', 'done': {'$gt': int(time.time()) - 7 * 86400}})
 
     # ================= Premium list =================
     async def premium_counts(self):
