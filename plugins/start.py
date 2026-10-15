@@ -131,6 +131,8 @@ async def deliver_file(client: Client, chat_id: int, payload: str, reply_to_msg=
         settings = await db.get_settings()
         auto_delete_time = settings.get('auto_delete', 0)
         is_protected = settings.get('protect_content', False)
+        if is_protected and settings.get('prem_forward', True) and await db.premium_expire(chat_id):
+            is_protected = False   # Premium members can forward & save
         share_mk = await build_share_markup(client, chat_id, unique_id, settings)
 
         if file_data.get('t') == 'b':

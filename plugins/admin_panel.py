@@ -312,6 +312,7 @@ async def scr_general(s):
     text = (
         "⚙️ <b>GENERAL</b>\n\n<blockquote>"
         f"Mode: <b>{s.get('mode', 'public')}</b> · Protect content: <b>{'ON' if s.get('protect_content') else 'OFF'}</b>\n"
+        f"Premium can forward/save: <b>{'ON' if s.get('prem_forward', True) else 'OFF'}</b> (when Protect is ON)\n"
         f"Auto-delete: <b>{str(ad) + ' min' if ad else 'OFF'}</b>\n"
         f"DB channel: <code>{s.get('active_db')}</code>\n"
         f"Log channel: <code>{s.get('log_channel')}</code></blockquote>"
@@ -322,6 +323,7 @@ async def scr_general(s):
          btn(f"Protect: {onoff(s.get('protect_content'))}", "ap:t:prot")],
         [btn(f"Auto-delete: {str(ad) + 'm' if ad else 'OFF'}", "ap:c:ad"),
          btn(f"Share button: {onoff(s.get('share_button', True))}", "ap:t:share")],
+        [btn(f"Premium forward/save: {onoff(s.get('prem_forward', True))}", "ap:t:pfw")],
         [btn("DB channel", "ap:in:gen_db"), btn("Log channel", "ap:in:gen_log")],
         [btn("⬅️ Back", "ap:home")],
     ]
@@ -343,6 +345,7 @@ TOGGLES = {  # key -> (setting, default, screen)
     'sl': ('shortlink_status', False, 'v'), 'wg': ('web_guard', False, 'v'), 'dual': ('dual_shortner', False, 'v'),
     'tri': ('trial_enabled', True, 'tr'), 'rem': ('reminder_enabled', True, 'r'), 'qh': ('quiet_hours', True, 'r'),
     'prot': ('protect_content', False, 'g'),
+    'pfw': ('prem_forward', True, 'g'),
     'share': ('share_button', True, 'g'),
     'proof': ('proof_enabled', True, 'pf'),
     'refer': ('ref_enabled', True, 'rf'),
