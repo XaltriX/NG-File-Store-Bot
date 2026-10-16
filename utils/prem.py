@@ -118,7 +118,8 @@ def pay_keyboard(settings, pid, selected_id, post_on):
 def render_card(settings, lang, me=None, social=0):
     custom = settings.get('card_custom_hi' if lang == 'hi' else 'card_custom_en') if lang in ('en', 'hi') else None
     duo = bool(sync_active(settings) and me)
-    tpl = custom or tr(lang, 'card_duo' if duo else 'card_solo')
+    tpl = custom or tr(lang, 'card_duo' if duo else 'card_solo').replace('{best}{proof}', '{best}{proof}{perks}')
+    perks = '\n' + tr(lang, 'perks') + (tr(lang, 'perk_duo') if duo else '')
     bp = best_plan(settings)
     best = (tr(lang, 'best_line', plan=html.escape(plan_name(bp, lang)), pd=fmt_pd(per_day(bp))) + "\n") if bp else ""
     proof = (tr(lang, 'social', n=social) + "\n") if social else ""
@@ -126,7 +127,7 @@ def render_card(settings, lang, me=None, social=0):
     bots = f"✅ @{me}\n✅ @{partner}" if duo else ""
     plans = "\n".join(f"🪙 ₹{p['price']} — {html.escape(plan_name(p, lang))}" for p in settings.get('premium_plans', []))
     out = (tpl.replace('{bots}', bots)
-              .replace('{best}', best).replace('{proof}', proof)
+              .replace('{perks}', perks).replace('{best}', best).replace('{proof}', proof)
               .replace('{plans}', plans)
               .replace('{upi}', html.escape(settings.get('upi_id', '')))
               .replace('{owner}', html.escape(settings.get('owner_handle', ''))))
@@ -151,8 +152,7 @@ def plans_view(settings, lang, me=None, social=0):
     if row:
         rows.append(row)
     links = []
-    for key, label in (('info_link', '📋 Info'), ('preview_link', '👀 Preview'),
-                       ('proofs_link', '⭐ Proofs'), ('qr_link', '📱 QR')):
+    for key, label in (('preview_link', '👀 Preview'), ('proofs_link', '⭐ Proofs')):
         url = clean_url(settings.get(key, ''))
         if url:
             links.append(btn(label, url=url))

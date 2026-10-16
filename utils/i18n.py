@@ -5,7 +5,6 @@ PREMIUM_CARD_EN = (
     "<blockquote>🎁 <b>One payment. Two bots.</b>\n{bots}\n"
     "<i>Pay in either bot. Premium turns on in both.</i></blockquote>\n\n{best}{proof}\n"
     "<b>How it works</b>\n1️⃣ Pick a plan → 2️⃣ Pay by UPI → 3️⃣ Send screenshot → 4️⃣ Done\n\n"
-    "🚫 No ads · ✅ No verification · ⚡ Direct videos\n\n"
     "👇 <i>Pick a plan to continue</i>"
 )
 
@@ -14,21 +13,18 @@ PREMIUM_CARD_HI = (
     "<blockquote>🎁 <b>एक पेमेंट। दो बॉट।</b>\n{bots}\n"
     "<i>किसी भी बॉट में पेमेंट करें। प्रीमियम दोनों में चालू होगा।</i></blockquote>\n\n{best}{proof}\n"
     "<b>कैसे होगा</b>\n1️⃣ प्लान चुनें → 2️⃣ UPI से पेमेंट → 3️⃣ स्क्रीनशॉट भेजें → 4️⃣ हो गया\n\n"
-    "🚫 कोई विज्ञापन नहीं · ✅ कोई वेरिफिकेशन नहीं · ⚡ सीधा वीडियो\n\n"
     "👇 <i>आगे बढ़ने के लिए प्लान चुनें</i>"
 )
 
 PREMIUM_SOLO_EN = (
     "💎 <b>Choose Your Plan</b>\n\n{best}{proof}\n"
     "<b>How it works</b>\n1️⃣ Pick a plan → 2️⃣ Pay by UPI → 3️⃣ Send screenshot → 4️⃣ Done\n\n"
-    "🚫 No ads · ✅ No verification · ⚡ Direct videos\n\n"
     "👇 <i>Pick a plan to continue</i>"
 )
 
 PREMIUM_SOLO_HI = (
     "💎 <b>अपना प्लान चुनें</b>\n\n{best}{proof}\n"
     "<b>कैसे होगा</b>\n1️⃣ प्लान चुनें → 2️⃣ UPI से पेमेंट → 3️⃣ स्क्रीनशॉट भेजें → 4️⃣ हो गया\n\n"
-    "🚫 कोई विज्ञापन नहीं · ✅ कोई वेरिफिकेशन नहीं · ⚡ सीधा वीडियो\n\n"
     "👇 <i>आगे बढ़ने के लिए प्लान चुनें</i>"
 )
 
@@ -250,6 +246,10 @@ STR['hi'].update({
     'winback': "💔 <b>हमें आपकी याद आई!</b>\n\n<blockquote>आपका प्रीमियम <b>{days}</b> दिन पहले खत्म हुआ।\nअभी रिन्यू करें और फिर से तुरंत, बिना विज्ञापन एक्सेस पाएं।</blockquote>",
     'u_d': "{n} दिन|{n} दिन", 'u_m': "{n} महीना|{n} महीने", 'u_y': "{n} साल|{n} साल",
 })
+
+STR['en'].update({'perks': '✨ <b>What you get</b>\n🚫 No ads\n✅ No verification, ever\n⚡ Direct files, instantly\n💾 Forward &amp; Save allowed\n♾️ Unlimited access\n', 'perk_duo': '🤖 One plan works in both bots\n'})
+
+STR['hi'].update({'perks': '✨ <b>आपको क्या मिलेगा</b>\n🚫 कोई विज्ञापन नहीं\n✅ कभी वेरिफिकेशन नहीं\n⚡ सीधी फ़ाइलें, तुरंत\n💾 फ़ॉरवर्ड और सेव की छूट\n♾️ अनलिमिटेड एक्सेस\n', 'perk_duo': '🤖 एक प्लान, दोनों बॉट में\n'})
 
 # Other languages live in utils/langs/<code>.py (each exposes a STR dict with the same keys).
 import importlib as _il
