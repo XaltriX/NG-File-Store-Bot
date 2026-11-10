@@ -1,14 +1,18 @@
 import threading
 import asyncio
 import uvloop
+
+# 🔁 One event loop for everything: create it BEFORE the database / Telegram client are imported,
+# so Motor (MongoDB) and Kurigram both bind to the same loop.
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 from pyrogram import Client
 from config import Config
 from server import keep_alive
 from utils.database import db
 from utils.background import ensure_background
-
-# 🚀 Uvloop: The Ultimate CPU & RAM Engine
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 plugins = dict(root="plugins")
 
@@ -62,9 +66,6 @@ if __name__ == "__main__":
     print("🌐 Starting Zero-RAM Health Server...")
     threading.Thread(target=keep_alive, daemon=True).start()
     
-    # 🚀 Safe Loop Initialization
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     loop.run_until_complete(setup_indexes())
     
     print("🚀 Advanced Bot is Starting with Kurigram!")

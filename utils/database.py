@@ -7,6 +7,11 @@ from utils.helpers import ist_date, ist_midnight, trial_info, ist_date_of, week_
 
 class Database:
     def __init__(self):
+        import asyncio
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = asyncio.get_event_loop()
         pool_settings = {
             "maxPoolSize": 50,
             "serverSelectionTimeoutMS": 5000,
@@ -50,6 +55,17 @@ class Database:
         # 🚀 FIX: In-memory cache for settings to prevent DB overload
         self._settings_cache = None
         self._settings_cache_time = 0
+
+    def ensure_loop(self):
+        """Safety net: if MongoDB clients belong to another event loop, rebuild them on the running one."""
+        try:
+            import asyncio
+            if self._loop is not asyncio.get_running_loop():
+                self.__init__()
+                from utils import sync
+                sync.forget_client()
+        except Exception as e:
+            print(f"ensure_loop: {e}")
 
     async def get_db_stats(self):
         stats = {}
