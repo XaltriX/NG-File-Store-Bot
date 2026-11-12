@@ -39,10 +39,12 @@ PROOF_CAPTION = (
     "✨ <i>Your turn could be next. Get Premium and watch without limits!</i>"
 )
 
-REMINDER_EN = ("👋 <b>Still looking for more?</b>\n\nYour free access is one tap away. "
-               "Verify in seconds, or go Premium for instant, ad-free files.")
-REMINDER_HI = ("👋 <b>और फ़ाइलें चाहिए?</b>\n\nआपका फ्री एक्सेस बस एक टैप दूर है। "
-               "कुछ सेकंड में वेरिफाई करें, या प्रीमियम लेकर तुरंत और बिना विज्ञापन फ़ाइलें पाएं।")
+REMINDER_EN = ("👋 <b>Still looking for more?</b>\n\n"
+               "🔓 Your free access is just one tap away.\n"
+               "⚡ Verify in seconds, or go 💎 <b>Premium</b> for instant, ad-free files.")
+REMINDER_HI = ("👋 <b>और फ़ाइलें चाहिए?</b>\n\n"
+               "🔓 आपका फ्री एक्सेस बस एक टैप दूर है।\n"
+               "⚡ कुछ सेकंड में वेरिफाई करें, या 💎 <b>प्रीमियम</b> लेकर तुरंत और बिना विज्ञापन फ़ाइलें पाएं।")
 
 STR = {
     'en': {

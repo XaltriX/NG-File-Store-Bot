@@ -12,6 +12,9 @@ from utils.helpers import clean_url, mask, ist_str, trial_info, week_key
 from utils.referral import MEDALS, prizes_text
 from utils.stats_ui import build_stats_text
 from utils.i18n import LANG_NAMES_EN
+from utils.database import REM_PRESETS
+from utils.scheduler import build_reminder, send_reminder
+from utils.cleanup import run_cleanup
 from utils.stats_ui import pct, funnel_line
 from utils.prem import premium_list_view, pending_view, fmt_age
 from utils.proof import post_proof
@@ -151,21 +154,63 @@ async def scr_card(s):
 
 
 async def scr_reminders(s):
+    steps, label = REM_PRESETS[s.get('reminder_preset', 0) if isinstance(s.get('reminder_preset', 0), int) and 0 <= s.get('reminder_preset', 0) < len(REM_PRESETS) else 0]
+    n = len(s.get('rem_media') or [])
     text = (
         "⏰ <b>REMINDERS</b>\n\n<blockquote>"
-        f"Status: <b>{'ON' if s.get('reminder_enabled', True) else 'OFF'}</b> · every <b>{s.get('reminder_hours', 12)}h</b>\n"
-        f"Quiet hours (11 PM – 8 AM IST): <b>{'ON' if s.get('quiet_hours', True) else 'OFF'}</b></blockquote>"
-        "\nSent only to users whose trial has ended and who are not verified or premium. "
-        "Stops after 5 ignored reminders."
+        f"Status: <b>{'ON' if s.get('reminder_enabled', True) else 'OFF'}</b>\n"
+        f"Pattern: <b>{label}</b> of inactivity\n"
+        f"Media: <b>{n}</b> (rotates per user)</blockquote>"
+        "\nSent to users whose trial has ended, who are not verified or premium, and who have not used the bot "
+        "for that long. Using the bot restarts the cycle. After the last step no more reminders are sent."
     )
     rows = [
         [btn(f"Reminder: {onoff(s.get('reminder_enabled', True))}", "ap:t:rem"),
-         btn(f"Every: {s.get('reminder_hours', 12)}h", "ap:c:rh")],
-        [btn(f"Quiet hours: {onoff(s.get('quiet_hours', True))}", "ap:t:qh")],
+         btn(f"Pattern: {label}", "ap:c:rp")],
+        [btn(f"🖼 Media ({n})", "ap:rm")],
         [btn("Text (English)", "ap:in:rtext_en"), btn("Text (हिंदी)", "ap:in:rtext_hi")],
         [btn("⬅️ Back", "ap:home")],
     ]
     return text, kb(rows)
+
+
+MEDIA_ICON = {'photo': '🖼', 'video': '🎬', 'animation': '🎞'}
+
+
+async def scr_rmedia(s):
+    pool = s.get('rem_media') or []
+    lines = "\n".join(f"{i + 1}. {MEDIA_ICON.get(m['t'], '📎')} {m['t']}" for i, m in enumerate(pool)) or "No media yet. Reminders go as text."
+    text = ("🖼 <b>REMINDER MEDIA</b>\n\n<blockquote>" + lines + "</blockquote>\n"
+            "Each user sees the next one every time; after the last it starts again from the first. "
+            "Media is saved per bot, so add it in each bot.")
+    rows = [[btn("➕ Add media", "ap:in:rmedia")]]
+    row = []
+    for i in range(len(pool)):
+        row += [btn(f"👁 {i + 1}", f"ap:rmv:{i}"), btn(f"🗑 {i + 1}", f"ap:rmd:{i}")]
+        if len(row) == 4:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([btn("⬅️ Back", "ap:r")])
+    return text, kb(rows)
+
+
+async def scr_storage(s):
+    used, limit = await db.storage_used_mb()
+    pct = used * 100 / limit if limit else 0
+    bar = "█" * int(pct // 10) + "░" * (10 - int(pct // 10))
+    last = s.get('last_cleanup')
+    if last:
+        done = ", ".join(f"{k}: {v}" for k, v in last['res'].items() if v) or "nothing to delete"
+        lt = f"{ist_str(last['ts'], '%d %b %I:%M %p')}\n{done}"
+    else:
+        lt = "not yet"
+    text = ("🧹 <b>STORAGE</b>\n\n<blockquote>"
+            f"{bar} <b>{pct:.0f}%</b>\n{used:.0f} / {limit} MB\n\nLast cleanup: {lt}</blockquote>\n"
+            "Runs automatically every night. Files, bans, premium and referral counts are never deleted.")
+    return text, kb([[btn("🧹 Clean now", "ap:clean"), btn("🔄 Refresh", "ap:sg")],
+                     [btn("⬅️ Back", "ap:st")]])
 
 
 async def scr_users(s):
@@ -289,7 +334,7 @@ async def scr_partner(s):
 
 
 async def scr_stats(s):
-    return await build_stats_text(), kb([[btn("🌐 Languages", "ap:lg")],
+    return await build_stats_text(), kb([[btn("🌐 Languages", "ap:lg"), btn("🧹 Storage", "ap:sg")],
                                          [btn("🔄 Refresh", "ap:st"), btn("⬅️ Back", "ap:home")]])
 
 
@@ -336,14 +381,14 @@ async def build_screen(screen, s):
         return await scr_shortner(s, arg)
     table = {'home': scr_home, 'v': scr_verify, 'tp': scr_tp, 'tr': scr_trial, 'pl': scr_plans,
              'pc': scr_card, 'r': scr_reminders, 'u': scr_users, 'bc': scr_broadcast,
-             'st': scr_stats, 'lg': scr_langs, 'g': scr_general, 'pt': scr_partner, 'pf': scr_proof, 'rf': scr_refer}
+             'st': scr_stats, 'lg': scr_langs, 'sg': scr_storage, 'rm': scr_rmedia, 'g': scr_general, 'pt': scr_partner, 'pf': scr_proof, 'rf': scr_refer}
     return await table.get(name, scr_home)(s)
 
 
 # ================= Toggle / cycle / stepper tables =================
 TOGGLES = {  # key -> (setting, default, screen)
     'sl': ('shortlink_status', False, 'v'), 'wg': ('web_guard', False, 'v'), 'dual': ('dual_shortner', False, 'v'),
-    'tri': ('trial_enabled', True, 'tr'), 'rem': ('reminder_enabled', True, 'r'), 'qh': ('quiet_hours', True, 'r'),
+    'tri': ('trial_enabled', True, 'tr'), 'rem': ('reminder_enabled', True, 'r'),
     'prot': ('protect_content', False, 'g'),
     'pfw': ('prem_forward', True, 'g'),
     'share': ('share_button', True, 'g'),
@@ -354,7 +399,7 @@ CYCLES = {  # key -> (setting, values, default, screen)
     'dur': ('verify_duration', [1, 4, 8, 16, 24, 48], 24, 'v'),
     'cred': ('bypass_credits', [1, 2, 3, 5, 10, 20], 3, 'v'),
     'byp': ('bypass_time', [0, 5, 10, 15, 20, 30, 45, 60], 15, 'v'),
-    'rh': ('reminder_hours', [3, 6, 12, 24, 48], 12, 'r'),
+    'rp': ('reminder_preset', [0, 1, 2, 3], 0, 'r'),
     'ad': ('auto_delete', [0, 5, 10, 30, 60, 120], 0, 'g'),
 }
 STEPPERS = {  # key -> (min, max)
@@ -362,6 +407,7 @@ STEPPERS = {  # key -> (min, max)
 }
 
 PROMPTS = {
+    'rmedia': ("Send a <b>photo, video or GIF</b> for the reminders. You can send several, one by one. Tap Cancel when done.", 'rm'),
     'sl1': ("Send the shortner <b>domain and API key</b> separated by a space.\nExample: <code>example.com abc123</code>", 's:1'),
     'sl2': ("Send the shortner <b>domain and API key</b> separated by a space.\nExample: <code>example.com abc123</code>", 's:2'),
     'tut1': ("Send the tutorial link for Shortner 1.", 's:1'),
@@ -563,6 +609,32 @@ async def panel_cb(client: Client, query: CallbackQuery):
         INPUT[uid] = {'field': field, 'chat': chat_id, 'msg': msg_id, 'back': back, 'mins': mins, 'target': target}
         await show(client, query, f"✏️ {prompt}", kb([[btn("✖️ Cancel", "ap:ic")]]))
         return await query.answer()
+
+    if act == 'rmd':
+        i = int(data.split(':')[1])
+        pool = list(s.get('rem_media') or [])
+        if 0 <= i < len(pool):
+            pool.pop(i)
+            await db.update_settings('rem_media', pool)
+        await query.answer("Deleted")
+        return await render(client, chat_id, msg_id, 'rm')
+
+    if act == 'rmv':
+        i = int(data.split(':')[1])
+        pool = s.get('rem_media') or []
+        if not 0 <= i < len(pool):
+            return await query.answer("Not found", show_alert=True)
+        text, markup = build_reminder(s, 'en', client.me.username)
+        try:
+            await send_reminder(client, chat_id, text, markup, pool[i])
+            return await query.answer("Preview sent")
+        except Exception as e:
+            return await query.answer(f"Failed: {e}"[:190], show_alert=True)
+
+    if act == 'clean':
+        await query.answer("Cleaning…")
+        await run_cleanup(client, alert=False)
+        return await render(client, chat_id, msg_id, 'sg')
 
     if act == 'ic':
         await query.answer("Cancelled")
@@ -784,6 +856,23 @@ async def admin_input_router(client: Client, message: Message):
         extra = f" · auto-delete after {st['mins']} min" if st.get('mins') else ""
         text = f"📣 <b>Ready to broadcast</b> to <b>{total}</b> {BC_LABELS[target]}{extra}.\n\nSend it now?"
         await edit_by_id(client, st['chat'], st['msg'], text, kb([[btn("✅ Confirm", "ap:bcgo"), btn("✖️ Cancel", "ap:bc")]]))
+        message.stop_propagation()
+
+    if field == 'rmedia':
+        m = message
+        kind, obj = (('photo', m.photo) if m.photo else ('video', m.video) if m.video
+                     else ('animation', m.animation) if m.animation else (None, None))
+        if not kind:
+            await message.reply_text("Please send a photo, video or GIF, or tap Cancel.")
+            message.stop_propagation()
+        s2 = await db.get_settings()
+        pool = list(s2.get('rem_media') or []) + [{'t': kind, 'f': obj.file_id}]
+        await db.update_settings('rem_media', pool)
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        await render(client, st['chat'], st['msg'], 'rm', f"✅ Added ({len(pool)} total). Send more, or tap Back.")
         message.stop_propagation()
 
     if not message.text:

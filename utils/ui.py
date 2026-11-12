@@ -14,10 +14,17 @@ def kb(rows):
     return InlineKeyboardMarkup(rows)
 
 
-def btn(text, data=None, url=None):
-    if url:
-        return InlineKeyboardButton(text, url=url)
-    return InlineKeyboardButton(text, callback_data=data)
+def btn(text, data=None, url=None, color=None):
+    """color: 'green' | 'blue' | 'red' (Telegram button styles). Ignored on Kurigram versions without support."""
+    kw = {'url': url} if url else {'callback_data': data}
+    if color:
+        try:
+            from pyrogram.enums import ButtonStyle
+            kw['style'] = {'green': ButtonStyle.SUCCESS, 'blue': ButtonStyle.PRIMARY, 'red': ButtonStyle.DANGER}[color]
+            return InlineKeyboardButton(text, **kw)
+        except Exception:
+            kw.pop('style', None)
+    return InlineKeyboardButton(text, **kw)
 
 
 async def show(client, query, text, markup=None, fresh=False):

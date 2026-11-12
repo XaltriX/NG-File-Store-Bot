@@ -5,6 +5,16 @@ import secrets
 from config import Config
 from utils.helpers import ist_date, ist_midnight, trial_info, ist_date_of, week_key
 
+# Reminder patterns: hours of inactivity at which reminder 1, 2, 3 ... are sent (then it stops).
+REM_PRESETS = [([24, 72, 168], '1d → 3d → 7d'), ([12, 48, 120], '12h → 2d → 5d'),
+               ([24], '1d only'), ([24, 48, 72, 96, 120], 'daily × 5')]
+
+
+def rem_steps(settings):
+    i = settings.get('reminder_preset', 0)
+    return REM_PRESETS[i if isinstance(i, int) and 0 <= i < len(REM_PRESETS) else 0][0]
+
+
 class Database:
     def __init__(self):
         import asyncio
@@ -49,6 +59,7 @@ class Database:
             self.db3 = motor.motor_asyncio.AsyncIOMotorClient(Config.MONGO_URI_3, **pool_settings)[Config.MONGO_DB_NAME]
             self.files_col3 = self.db3.files
             
+        self._touched = {}
         self._is_indexed = False 
         self._cleaned_on = ''
         
@@ -326,7 +337,7 @@ class Database:
 
     async def add_user(self, user_id: int):
         if not await self.users_col.find_one({'_id': user_id}):
-            await self.users_col.insert_one({'_id': user_id})
+            await self.users_col.insert_one({'_id': user_id, 'last_active': int(time.time()), 'rem_n': 0})
             return True 
         return False
 
@@ -364,7 +375,7 @@ class Database:
             'ref_enabled': True, 'ref_need': 5, 'ref_days': 1, 'ref_weekly': [10, 8, 6, 4, 2],
             'shortener2_url': '', 'shortener2_api': '', 'tutorial2_link': '',
             'trial_enabled': True, 'trial_days': 3, 'trial_daily': 5,
-            'reminder_enabled': True, 'reminder_hours': 12, 'quiet_hours': True,
+            'reminder_enabled': True, 'reminder_preset': 0,
             'upi_id': 'kunaljaisinghpur@axl', 'owner_handle': '@NeonGhost',
             'qr_url': 'https://files.catbox.moe/2qdo4w.png',
             'info_link': 'https://t.me/NgPremiumX/9',
@@ -636,28 +647,46 @@ class Database:
         return expire_at
 
     # ================= Reminders =================
+    async def touch(self, user_id: int):
+        """Record that the user just used the bot (max one write per minute per user) and restart the reminder cycle."""
+        now = int(time.time())
+        if now - self._touched.get(user_id, 0) < 60:
+            return
+        if len(self._touched) > 50000:
+            self._touched.clear()
+        self._touched[user_id] = now
+        await self.users_col.update_one({'_id': user_id}, {'$set': {'last_active': now, 'rem_n': 0}})
+
+    async def backfill_activity(self):
+        """One-time: users without activity data count as 'active now', so nobody gets a sudden burst of reminders."""
+        await self.users_col.update_many({'last_active': {'$exists': False}},
+                                         {'$set': {'last_active': int(time.time()), 'rem_n': 0}})
+
     async def reminder_candidates(self, settings: dict, limit: int = 100):
+        steps = rem_steps(settings)
         days = int(settings.get('trial_days', 3) or 1)
-        hours = int(settings.get('reminder_hours', 12) or 12)
         now = int(time.time())
         cutoff = ist_midnight(-(days - 1))
-        query = {
-            'trial_start': {'$lt': cutoff},
-            'reminder_off': {'$ne': True},
-            '$and': [
-                {'$or': [{'last_rem': {'$exists': False}}, {'last_rem': {'$lte': now - hours * 3600}}]},
-                {'$or': [{'rem_ignored': {'$exists': False}}, {'rem_ignored': {'$lt': 5}}]},
-            ],
-        }
+        ors = []
+        for k, hrs in enumerate(steps):
+            cond = {'last_active': {'$lte': now - hrs * 3600}}
+            if k == 0:
+                cond['rem_n'] = {'$in': [0, None]}
+            else:  # keep the planned gap between two reminders, even for users who were already inactive for long
+                cond['rem_n'] = k
+                cond['last_rem'] = {'$lte': now - (hrs - steps[k - 1]) * 3600}
+            ors.append(cond)
+        query = {'trial_start': {'$lt': cutoff}, 'reminder_off': {'$ne': True}, '$or': ors}
         return await self.users_col.find(query).limit(limit).to_list(length=limit)
 
     async def mark_checked(self, user_id: int):
-        await self.users_col.update_one({'_id': user_id}, {'$set': {'last_rem': int(time.time())}})
+        """Skipped (already verified / premium / banned): move to the next step without sending."""
+        await self.users_col.update_one({'_id': user_id}, {'$set': {'last_rem': int(time.time())}, '$inc': {'rem_n': 1}})
 
     async def mark_reminded(self, user_id: int, msg_id: int):
         await self.users_col.update_one(
             {'_id': user_id},
-            {'$set': {'last_rem': int(time.time()), 'rem_msg': msg_id}, '$inc': {'rem_ignored': 1}}
+            {'$set': {'last_rem': int(time.time()), 'rem_msg': msg_id}, '$inc': {'rem_n': 1, 'rem_idx': 1}}
         )
 
     async def mark_reminder_off(self, user_id: int):
@@ -752,6 +781,39 @@ class Database:
         else:
             cur = await self.verified_col.count_documents({'expire_at': {'$gt': int(time.time())}})
         return cur, max(ever, cur)
+
+    # ================= Storage cleanup =================
+    async def cleanup(self):
+        """Delete old, unneeded records. Never touches files, bans, premium/verified users or referral counts."""
+        now = int(time.time())
+        res = {}
+
+        async def run(name, col, query):
+            try:
+                res[name] = (await col.delete_many(query)).deleted_count
+            except Exception as e:
+                res[name] = f"err: {e}"
+
+        await run('verify logs', self.vlog_col, {'date': {'$lt': ist_date(7)}})
+        await run('daily stats', self.stats_col, {'_id': {'$lt': ist_date(60)}})
+        await run('payments', self.pay_col, {'status': {'$ne': 'pending'}, 'ts': {'$lt': now - 60 * 86400}})
+        await run('sync outbox', self.sync_out, {'sent': True, 'sent_at': {'$lt': now - 3 * 86400}})
+        await run('old invite links', self.links_col, {'expire_at': {'$lt': now - 7 * 86400}})
+        await run('expired premium', self.premium_col, {'expire_at': {'$lt': now - 8 * 86400}})
+        await run('expired verifies', self.verified_col, {'expire_at': {'$lt': now - 86400}})
+        await run('dead users', self.users_col, {'reminder_off': True, 'ever_premium': {'$ne': True},
+                                                 'last_active': {'$lt': now - 90 * 86400}})
+        return res
+
+    async def storage_used_mb(self):
+        """(used_mb, limit_mb) of the main database (storage + indexes, as Atlas counts it)."""
+        try:
+            st = await self.db1.command("dbstats")
+            used = (st.get('storageSize', 0) + st.get('indexSize', 0)) / 1048576
+        except Exception:
+            used = 0
+        limit = int((await self.get_settings()).get('storage_limit_mb', 512) or 512)
+        return used, limit
 
     # ================= Language / funnel stats =================
     async def lang_stats(self):

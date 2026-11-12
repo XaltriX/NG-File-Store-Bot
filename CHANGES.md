@@ -55,3 +55,8 @@ Old commands still work as hidden shortcuts. Env vars: see .env.example.
 - Plan names auto-built from days per language (English/Hindi keep your custom names). Custom card/reminder text applies to English & Hindi only.
 - Premium: ⭐ best-value plan + per-day price, offer line on verify/limit screens, social proof (shown only when >5 approvals in last 7 days), win-back messages 1 & 3 days after expiry.
 - Stats: language mix + Trial→Verify→Premium funnel in /stats; Admin → Stats → 🌐 Languages (per-language conversion).
+
+## Smarter reminders + media + storage cleanup
+- Reminders now depend on inactivity: first after 24h of no bot use, then 3 days, then 7 days, then stop (pattern selectable in Admin → Reminders). Any use of the bot restarts the cycle. No quiet hours. Existing users count as "active now" on first start.
+- Reminder media: Admin → Reminders → 🖼 Media. Add any number of photos/videos/GIFs (per bot); each user gets the next one every time, wrapping around. No media = text only. Text is shown in a quote block; Verify button green, Premium blue (needs recent Kurigram, otherwise plain).
+- Storage: automatic cleanup every night (3 AM IST) + Admin → Stats → 🧹 Storage (usage bar, Clean now). Owner gets an alert at 80% usage. Files, bans, premium/verified users and referral counts are never deleted.

@@ -4,7 +4,7 @@ import time
 from pyrogram.enums import ParseMode
 from pyrogram.errors import FloodWait
 from utils.database import db
-from utils.helpers import ist_now, ist_str
+from utils.helpers import ist_str
 from utils.i18n import tr
 from utils.ui import btn, kb, more_row
 
@@ -12,11 +12,36 @@ BLOCKED = {'UserIsBlocked', 'InputUserDeactivated', 'UserDeactivated', 'UserDeac
 CHECK_EVERY = 600  # seconds
 
 
-def in_quiet_hours(settings):
-    if not settings.get('quiet_hours', True):
-        return False
-    hour = ist_now().hour
-    return hour >= 23 or hour < 8
+def style_reminder(text):
+    """Title stays bold on top, the message goes into a quote block."""
+    if '<blockquote' in text:
+        return text
+    head, sep, body = text.partition('\n\n')
+    return f"{head}\n\n<blockquote>{body}</blockquote>" if sep else f"<blockquote>{text}</blockquote>"
+
+
+def build_reminder(settings, lang, bot_username):
+    custom = settings.get('reminder_text_hi' if lang == 'hi' else 'reminder_text') if lang in ('en', 'hi') else None
+    text = style_reminder(custom or tr(lang, 'reminder'))
+    markup = kb([[
+        btn(tr(lang, 'b_verify'), url=f"https://t.me/{bot_username}?start=getverify", color='green'),
+        btn(tr(lang, 'b_premium'), "prem_open", color='blue'),
+    ]] + more_row(settings, lang))
+    return text, markup
+
+
+async def send_reminder(client, uid, text, markup, media=None):
+    """Photo / video / GIF with the text as caption; plain text if there is no media or it fails."""
+    if media:
+        try:
+            send = getattr(client, 'send_' + media['t'])
+            return await send(uid, media['f'], caption=text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        except FloodWait:
+            raise
+        except Exception as e:
+            if type(e).__name__ in BLOCKED:
+                raise
+    return await client.send_message(uid, text, reply_markup=markup, parse_mode=ParseMode.HTML)
 
 
 async def _is_verified(uid, user, settings):
@@ -38,18 +63,15 @@ async def run_reminders(client, settings):
                     await db.mark_checked(uid)
                     continue
                 lang = u.get('lang') or 'en'
-                custom = settings.get('reminder_text_hi' if lang == 'hi' else 'reminder_text') if lang in ('en', 'hi') else None
-                text = custom or tr(lang, 'reminder')
+                text, markup = build_reminder(settings, lang, bot_username)
+                pool = settings.get('rem_media') or []
+                media = pool[u.get('rem_idx', 0) % len(pool)] if pool else None
                 if u.get('rem_msg'):
                     try:
                         await client.delete_messages(uid, u['rem_msg'])
                     except Exception:
                         pass
-                markup = kb([[
-                    btn(tr(lang, 'b_verify'), url=f"https://t.me/{bot_username}?start=getverify"),
-                    btn(tr(lang, 'b_premium'), "prem_open"),
-                ]] + more_row(settings, lang))
-                m = await client.send_message(uid, text, reply_markup=markup, parse_mode=ParseMode.HTML)
+                m = await send_reminder(client, uid, text, markup, media)
                 await db.mark_reminded(uid, m.id)
                 await db.bump_stat('reminders_sent')
             except FloodWait as e:
@@ -122,14 +144,17 @@ async def run_winback(client):
 
 async def reminder_loop(client):
     await asyncio.sleep(30)
+    try:
+        await db.backfill_activity()
+    except Exception as e:
+        print(f"Activity backfill error: {e}")
     while True:
         try:
             settings = await db.get_settings()
-            if not in_quiet_hours(settings):
-                await run_expiry_notices(client)
-                await run_winback(client)
-                if settings.get('reminder_enabled', True) and settings.get('shortlink_status'):
-                    await run_reminders(client, settings)
+            await run_expiry_notices(client)
+            await run_winback(client)
+            if settings.get('reminder_enabled', True) and settings.get('shortlink_status'):
+                await run_reminders(client, settings)
         except Exception as e:
             print(f"Scheduler error: {e}")
         await asyncio.sleep(CHECK_EVERY)
